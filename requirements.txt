@@ -1,6 +1,6 @@
 streamlit
-python-docx
-pandas
 PyPDF2
+python-docx
+python-PPTX
 duckduckgo_search
 
