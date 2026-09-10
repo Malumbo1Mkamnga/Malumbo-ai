@@ -1,2 +1,2 @@
-streamlit==1.38.0
-duckduckgo_search==6.1.1
+streamlit
+duckgo_search
