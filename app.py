@@ -4,146 +4,102 @@ from docx import Document
 from duckduckgo_search import DDGS
 
 # ============================================================
-# MALUMBO AI
+# MALUMBO AI v3.0 - GLOBAL BRAIN
+# Global Web Search + Malawi Expertise + File Chat
 # ============================================================
 
 st.set_page_config(
     page_title="MALUMBO AI",
-    page_icon="🇲🇼",
+    page_icon="🧠",
     layout="wide"
 )
 
-st.title("🧠 MALUMBO AI - Your Smart Malawi Assistant")
-st.write("Ask questions about Malawi or search the web for information.")
+st.title("🧠 MALUMBO AI")
+st.caption("🌍 Global AI Assistant with 🇲🇼 Malawi Expertise")
 
 # ============================================================
 # MALAWI KNOWLEDGE BASE
 # ============================================================
 
 MALAWI_KNOWLEDGE = {
-    "president": (
-        "As of 2026, the President of Malawi is "
-        "**Arthur Peter Mutharika**."
-    ),
-
-    "capital": (
-        "The capital city of Malawi is **Lilongwe**."
-    ),
-
-    "currency": (
-        "The currency of Malawi is the "
-        "**Malawian Kwacha (MWK)**."
-    ),
-
-    "official language": (
-        "The official language of Malawi is **English**. "
-        "Chichewa is widely spoken across the country."
-    ),
-
-    "national flag": (
-        "The flag of Malawi has three horizontal stripes: "
-        "black, red, and green, with a rising red sun on the "
-        "upper black stripe."
-    ),
-
-    "independence": (
-        "Malawi gained independence from British colonial rule "
-        "on **6 July 1964**."
-    ),
-
-    "largest city": (
-        "Lilongwe is the capital city of Malawi, while "
-        "Blantyre is one of the country's major commercial cities."
-    ),
-
-    "lake malawi": (
-        "Lake Malawi is one of Africa's Great Lakes and is "
-        "located mainly within Malawi."
-    ),
-
-    "malawi population": (
-        "Malawi has a population of more than 20 million people. "
-        "The exact population depends on the year and data source."
-    )
+    "president malawi": "As of 2026, the President of Malawi is **Peter Mutharika**.",
+    "vice president malawi": "As of 2026, the Vice President of Malawi is **Jane Ansah**.",
+    "capital malawi": "The capital city of Malawi is **Lilongwe**.",
+    "currency malawi": "The currency of Malawi is the **Malawian kwacha (MWK)**.",
+    "language malawi": "Malawi's official language is **English**, while **Chichewa** is widely spoken.",
 }
 
 # ============================================================
-# FILE TEXT EXTRACTION
+# FILE READER
 # ============================================================
 
-def extract_pdf_text(file):
+def read_file(file):
     text = ""
 
     try:
-        reader = PyPDF2.PdfReader(file)
+        if file.name.lower().endswith(".pdf"):
+            pdf_reader = PyPDF2.PdfReader(file)
 
-        for page in reader.pages:
-            page_text = page.extract_text()
+            for page in pdf_reader.pages:
+                extracted = page.extract_text()
 
-            if page_text:
-                text += page_text + "\n"
+                if extracted:
+                    text += extracted + "\n"
 
-    except Exception as e:
-        text = f"Could not read PDF: {e}"
+        elif file.name.lower().endswith(".docx"):
+            doc = Document(file)
 
-    return text
+            for para in doc.paragraphs:
+                if para.text.strip():
+                    text += para.text + "\n"
 
-
-def extract_docx_text(file):
-    text = ""
-
-    try:
-        document = Document(file)
-
-        for paragraph in document.paragraphs:
-            text += paragraph.text + "\n"
+        return text
 
     except Exception as e:
-        text = f"Could not read Word document: {e}"
-
-    return text
+        return f"Could not read {file.name}: {e}"
 
 
 # ============================================================
 # WEB SEARCH
 # ============================================================
 
-def web_search(query):
+def web_search(query, max_results=5):
+
     context = ""
     links = []
 
     try:
-        search_query = query + " Malawi 2026"
-
         with DDGS() as ddgs:
 
             results = ddgs.text(
-                search_query,
-                max_results=5
+                query,
+                max_results=max_results
             )
 
-            for result in results:
+            for r in results:
 
-                title = result.get("title", "")
-                body = result.get("body", "")
-                href = result.get("href", "")
+                title = r.get("title", "Untitled source")
+                body = r.get("body", "")
+                href = r.get("href", "")
 
-                if body:
-                    context += body + "\n\n"
+                context += (
+                    f"Source: {title}\n"
+                    f"{body}\n\n"
+                )
 
-                if title and href:
+                if href:
                     links.append(
-                        f"[{title}]({href})"
+                        f"- [{title}]({href})"
                     )
 
-    except Exception:
-        return "", []
+    except Exception as e:
+        return "", [], str(e)
 
-    return context, links
+    return context, links, None
 
 
 # ============================================================
-# MALUMBO AI ANSWER ENGINE
+# SMART AI SEARCH
 # ============================================================
 
 def ai_search(query):
@@ -151,270 +107,435 @@ def ai_search(query):
     query_lower = query.lower().strip()
 
     # --------------------------------------------------------
-    # STEP 1: CHECK MALAWI KNOWLEDGE BASE
+    # 1. CHECK MALAWI KNOWLEDGE BASE
     # --------------------------------------------------------
 
-    for key, answer in MALAWI_KNOWLEDGE.items():
+    if "malawi" in query_lower:
 
-        if key in query_lower:
+        for key, answer in MALAWI_KNOWLEDGE.items():
 
-            return (
-                answer
-                + "\n\n"
-                + "*Answered from MALUMBO AI's Malawi knowledge base.*"
-            )
+            words = key.split()
 
-    # --------------------------------------------------------
-    # SPECIAL PRESIDENT QUESTIONS
-    # --------------------------------------------------------
+            if all(word in query_lower for word in words):
 
-    president_words = [
-        "who is the president",
-        "president of malawi",
-        "malawi president",
-        "current president",
-        "president malawi"
-    ]
-
-    if any(word in query_lower for word in president_words):
-
-        return (
-            "**The President of Malawi is "
-            "Arthur Peter Mutharika.** 🇲🇼\n\n"
-            "*MALUMBO AI Malawi knowledge base*"
-        )
+                return (
+                    f"### 🇲🇼 MALAWI ANSWER\n\n"
+                    f"{answer}\n\n"
+                    f"*Answered from MALUMBO AI's Malawi knowledge base.*"
+                )
 
     # --------------------------------------------------------
-    # SPECIAL CAPITAL QUESTIONS
+    # 2. GLOBAL SEARCH
     # --------------------------------------------------------
 
-    capital_words = [
-        "capital of malawi",
-        "malawi capital",
-        "what is the capital"
-    ]
+    search_query = query
 
-    if any(word in query_lower for word in capital_words):
+    # If Malawi is mentioned, boost Malawi without
+    # restricting the search to Malawi-only websites.
+    if "malawi" in query_lower:
+        search_query = f"{query} Malawi"
 
-        return (
-            "**The capital city of Malawi is Lilongwe.** 🇲🇼\n\n"
-            "*MALUMBO AI Malawi knowledge base*"
-        )
-
-    # --------------------------------------------------------
-    # SPECIAL CURRENCY QUESTIONS
-    # --------------------------------------------------------
-
-    currency_words = [
-        "currency of malawi",
-        "malawi currency",
-        "money used in malawi",
-        "malawi money"
-    ]
-
-    if any(word in query_lower for word in currency_words):
-
-        return (
-            "**The currency of Malawi is the Malawian Kwacha (MWK).** 💰\n\n"
-            "*MALUMBO AI Malawi knowledge base*"
-        )
-
-    # --------------------------------------------------------
-    # STEP 2: TRY WEB SEARCH
-    # --------------------------------------------------------
-
-    context, links = web_search(query)
-
-    # --------------------------------------------------------
-    # STEP 3: IF WEB SEARCH WORKS
-    # --------------------------------------------------------
-
-    if context:
-
-        answer = "**Answer:**\n\n"
-
-        # Limit the amount of returned search text
-        answer += context[:5000]
-
-        if links:
-
-            answer += "\n\n**Sources:**\n\n"
-
-            for link in links:
-                answer += "- " + link + "\n"
-
-        return answer
-
-    # --------------------------------------------------------
-    # STEP 4: FALLBACK ANSWER
-    # --------------------------------------------------------
-
-    return (
-        f"I couldn't find live web results for **'{query}'**.\n\n"
-        "However, MALUMBO AI is still working. 🇲🇼\n\n"
-        "Try asking me things such as:\n"
-        "- Who is the president of Malawi?\n"
-        "- What is the capital of Malawi?\n"
-        "- What is the currency of Malawi?\n"
-        "- When did Malawi gain independence?\n"
-        "- Tell me about Lake Malawi."
+    context, links, error = web_search(
+        search_query,
+        max_results=5
     )
 
+    # --------------------------------------------------------
+    # 3. SEARCH ERROR
+    # --------------------------------------------------------
 
-# ============================================================
-# FILE UPLOAD SECTION
-# ============================================================
+    if error:
 
-st.sidebar.header("📂 Upload Documents")
+        return (
+            "### ⚠️ Web Search Problem\n\n"
+            f"I could not complete the web search.\n\n"
+            f"**Error:** `{error}`\n\n"
+            "Try searching again in a few seconds."
+        )
 
-uploaded_files = st.sidebar.file_uploader(
-    "Upload PDF or Word documents",
-    type=["pdf", "docx"],
-    accept_multiple_files=True
-)
+    # --------------------------------------------------------
+    # 4. NO RESULTS
+    # --------------------------------------------------------
 
-document_text = ""
+    if not context:
 
-if uploaded_files:
+        return (
+            f"### 🔎 No Results Found\n\n"
+            f"I couldn't find useful web results for:\n\n"
+            f"**{query}**\n\n"
+            "Try using different keywords."
+        )
 
-    st.sidebar.success(
-        f"{len(uploaded_files)} file(s) uploaded."
+    # --------------------------------------------------------
+    # 5. DISPLAY RESULTS
+    # --------------------------------------------------------
+
+    answer = (
+        f"### 🌍 Results for: `{query}`\n\n"
+        "I found the following information from the web:\n\n"
     )
 
-    for uploaded_file in uploaded_files:
+    answer += context
 
-        if uploaded_file.name.lower().endswith(".pdf"):
+    # --------------------------------------------------------
+    # 6. SOURCES
+    # --------------------------------------------------------
 
-            document_text += (
-                extract_pdf_text(uploaded_file)
-                + "\n"
-            )
+    if links:
 
-        elif uploaded_file.name.lower().endswith(".docx"):
+        answer += "\n### 🔗 Sources\n\n"
 
-            document_text += (
-                extract_docx_text(uploaded_file)
-                + "\n"
-            )
+        answer += "\n".join(links)
 
-    # Limit document context
-    document_text = document_text[:15000]
+    return answer
 
 
 # ============================================================
-# MAIN QUESTION AREA
+# PAGE TABS
 # ============================================================
 
-query = st.text_input(
-    "Ask MALUMBO AI anything:",
-    placeholder="Example: Who is the president of Malawi?"
+tab1, tab2, tab3 = st.tabs(
+    [
+        "1. 🌍 Research & Chat",
+        "2. ✍️ Academic Writing",
+        "3. 📊 Presentation Generator"
+    ]
 )
 
 
 # ============================================================
-# SEARCH BUTTON
+# TAB 1 - RESEARCH & CHAT
 # ============================================================
 
-if st.button("🔍 Search & Answer"):
+with tab1:
 
-    if query.strip():
+    st.header("🌍 Research The Whole Internet")
 
-        with st.spinner("🧠 MALUMBO AI is thinking..."):
+    st.write(
+        "Ask MALUMBO AI about Malawi, USA, UK, science, "
+        "technology, agriculture, economics, politics, news, "
+        "academic research and much more."
+    )
 
-            # ------------------------------------------------
-            # If documents are uploaded, search document first
-            # ------------------------------------------------
+    uploaded_files = st.file_uploader(
+        "📎 Upload PDF or DOCX",
+        type=["pdf", "docx"],
+        accept_multiple_files=True
+    )
 
-            if document_text:
+    file_context = ""
 
-                query_words = query.lower().split()
+    if uploaded_files:
 
-                matching_lines = []
+        st.success(
+            f"📚 {len(uploaded_files)} file(s) uploaded."
+        )
 
-                for line in document_text.split("\n"):
+        for file in uploaded_files:
 
-                    line_lower = line.lower()
+            with st.spinner(f"Reading {file.name}..."):
 
-                    if any(
-                        word in line_lower
-                        for word in query_words
-                        if len(word) > 3
-                    ):
+                extracted_text = read_file(file)
 
-                        matching_lines.append(line)
+                file_context += (
+                    f"\n\n===== FILE: {file.name} =====\n"
+                    f"{extracted_text}\n"
+                )
 
-                if matching_lines:
+        with st.expander("📄 View uploaded file information"):
 
-                    st.subheader("📄 Answer from your documents")
-
-                    document_answer = "\n".join(
-                        matching_lines[:20]
-                    )
-
-                    st.write(document_answer)
-
-                    st.divider()
-
-                    st.caption(
-                        "Answer found in your uploaded document(s)."
-                    )
-
-                else:
-
-                    st.subheader("🌐 MALUMBO AI Answer")
-
-                    st.write(
-                        ai_search(query)
-                    )
-
-            else:
-
-                st.subheader("🌐 MALUMBO AI Answer")
-
+            for file in uploaded_files:
                 st.write(
+                    f"• **{file.name}**"
+                )
+
+    query = st.text_input(
+        "Ask anything",
+        placeholder=(
+            "Example: latest AI research 2026, "
+            "president of USA, climate change effects..."
+        )
+    )
+
+    if st.button(
+        "🔍 Search & Answer",
+        use_container_width=True
+    ):
+
+        if not query:
+
+            st.warning(
+                "Please enter a question first."
+            )
+
+        else:
+
+            with st.spinner(
+                "🌍 Searching the global web..."
+            ):
+
+                # If files were uploaded, include their
+                # content in the search context.
+                if file_context:
+
+                    st.markdown(
+                        "### 📚 Uploaded Document Context"
+                    )
+
+                    # Limit displayed document text
+                    # to prevent extremely large output.
+                    display_context = file_context[:12000]
+
+                    st.text_area(
+                        "Document content",
+                        display_context,
+                        height=250
+                    )
+
+                st.markdown(
                     ai_search(query)
                 )
 
-    else:
 
-        st.warning(
-            "Please type a question first."
-        )
+# ============================================================
+# TAB 2 - ACADEMIC WRITING
+# ============================================================
+
+with tab2:
+
+    st.header("✍️ Academic Writing Assistant")
+
+    st.write(
+        "Create a basic academic structure for essays, "
+        "assignments and research papers."
+    )
+
+    topic = st.text_input(
+        "Essay / Research Paper Topic",
+        key="academic_topic",
+        placeholder="Enter your topic..."
+    )
+
+    level = st.selectbox(
+        "Academic Level",
+        [
+            "High School",
+            "University",
+            "Masters"
+        ]
+    )
+
+    academic_type = st.selectbox(
+        "Type of Work",
+        [
+            "Essay",
+            "Research Paper",
+            "Assignment",
+            "Research Proposal",
+            "Literature Review"
+        ]
+    )
+
+    if st.button(
+        "📝 Generate Outline + Sources",
+        use_container_width=True
+    ):
+
+        if not topic:
+
+            st.warning(
+                "Please enter an academic topic first."
+            )
+
+        else:
+
+            st.markdown(
+                f"""
+### 📚 Academic Work
+
+**Topic:** {topic}
+
+**Level:** {level}
+
+**Type:** {academic_type}
+
+---
+
+### Suggested Structure
+
+**1. Introduction**
+
+- Background of the study
+- Problem statement
+- Purpose of the study
+- Objectives
+- Research questions
+
+**2. Literature Review**
+
+- Key concepts
+- Theoretical literature
+- Empirical literature
+- Research gap
+
+**3. Methodology**
+
+- Research design
+- Study area
+- Target population
+- Sampling procedure
+- Sample size
+- Data collection
+- Data analysis
+
+**4. Results / Discussion**
+
+- Presentation of findings
+- Interpretation
+- Comparison with previous studies
+
+**5. Conclusion**
+
+- Summary of findings
+- Conclusions
+- Recommendations
+
+**6. References**
+
+- Use appropriate academic sources
+- Apply APA referencing where required
+                """
+            )
+
+            st.info(
+                "💡 Tip: Use the Research & Chat tab to "
+                "search for current academic sources before "
+                "writing your literature review."
+            )
 
 
 # ============================================================
-# SIDEBAR INFORMATION
+# TAB 3 - PRESENTATION GENERATOR
 # ============================================================
 
-st.sidebar.divider()
+with tab3:
 
-st.sidebar.subheader("✨ MALUMBO AI Features")
+    st.header("📊 Presentation Generator")
 
-st.sidebar.write(
+    st.write(
+        "Generate a simple presentation structure "
+        "for academic or professional presentations."
+    )
+
+    pres_topic = st.text_input(
+        "Presentation Topic",
+        key="presentation_topic",
+        placeholder="Example: Conservation Agriculture"
+    )
+
+    slides = st.slider(
+        "Number of Slides",
+        min_value=3,
+        max_value=15,
+        value=7
+    )
+
+    if st.button(
+        "📊 Generate Slide Structure",
+        use_container_width=True
+    ):
+
+        if not pres_topic:
+
+            st.warning(
+                "Please enter a presentation topic first."
+            )
+
+        else:
+
+            st.markdown(
+                f"## 📊 Presentation: {pres_topic}"
+            )
+
+            st.write(
+                f"**Number of slides:** {slides}"
+            )
+
+            slide_titles = [
+                "Title",
+                "Introduction",
+                "Background",
+                "Problem Statement",
+                "Objectives",
+                "Literature Review",
+                "Methodology",
+                "Results",
+                "Discussion",
+                "Conclusion",
+                "Recommendations",
+                "References",
+                "Questions & Answers",
+                "Thank You"
+            ]
+
+            for i in range(slides):
+
+                if i < len(slide_titles):
+
+                    title = slide_titles[i]
+
+                else:
+
+                    title = f"Section {i + 1}"
+
+                st.markdown(
+                    f"""
+### Slide {i + 1}: {title}
+
+- Key point 1
+- Key point 2
+- Key point 3
+                    """
+                )
+
+
+# ============================================================
+# SIDEBAR
+# ============================================================
+
+st.sidebar.title("🧠 MALUMBO AI")
+
+st.sidebar.success(
     """
-    ✅ Malawi knowledge base
+✅ Global Web Search
 
-    ✅ Web search
+✅ Malawi Expert Mode
 
-    ✅ PDF upload
+✅ Academic Research
 
-    ✅ Word document upload
+✅ PDF/DOCX Upload
 
-    ✅ Document question answering
+✅ Academic Writing
 
-    ✅ Multiple file support
-
-    ✅ Search fallback system
-    """
+✅ Presentation Generator
+"""
 )
 
+st.sidebar.markdown("---")
 
-# ============================================================
-# FOOTER
-# ============================================================
+st.sidebar.info(
+    """
+🌍 **MALUMBO AI v3.0**
 
-st.divider()
+A global AI research assistant
+with special knowledge of Malawi.
 
-st.caption(
-    "🇲🇼 MALUMBO AI — Smart AI Assistant for Malawi"
+🇲🇼 Malawi + 🌍 Global
+"""
+)
+
+st.sidebar.markdown("---")
+
+st.sidebar.caption(
+    "Built with Streamlit • MALUMBO AI"
 )
