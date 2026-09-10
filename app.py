@@ -5,7 +5,7 @@ from docx.shared import Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.section import WD_SECTION
 from pptx import Presentation
-from pptx.util import Inches, Pt as PPTPt
+from pptx.util import Inches, Pt
 from duckduckgo_search import DDGS
 import io
 import re
@@ -13,7 +13,7 @@ import re
 
 # ============================================================
 # MALUMBO AI v5.0
-# FULL AI WRITER + PRESENTATION GENERATOR
+# FULL OUTPUT MODE
 # ============================================================
 
 st.set_page_config(
@@ -23,7 +23,14 @@ st.set_page_config(
 )
 
 st.title("🧠 MALUMBO AI v5.0")
-st.caption("Global AI Research • Academic Writing • Presentation Generator")
+st.subheader("🌍 Full AI Writer, Research Assistant & Presentation Generator")
+
+st.markdown(
+    """
+    **MALUMBO AI** helps you research topics, write academic papers,
+    read PDF documents, and generate PowerPoint presentations.
+    """
+)
 
 
 # ============================================================
@@ -34,14 +41,11 @@ MALAWI_KNOWLEDGE = {
     "capital malawi":
         "The capital city of Malawi is Lilongwe.",
 
-    "malawi capital":
-        "The capital city of Malawi is Lilongwe.",
-
     "president malawi":
-        "Malawi's presidency is a time-sensitive fact. MALUMBO AI will search the web for the latest information.",
+        "The current President of Malawi should be verified using a current web search before being used in academic or official work.",
 
     "malawi":
-        "Malawi is a landlocked country in southeastern Africa. Its economy is strongly connected to agriculture, with maize being one of the major staple crops."
+        "Malawi is a landlocked country in southeastern Africa. Its economy is strongly connected to agriculture, with smallholder farming playing an important role."
 }
 
 
@@ -53,17 +57,9 @@ def ai_search(query):
 
     query_lower = query.lower()
 
-    # Check simple built-in knowledge first
-    for key, answer in MALAWI_KNOWLEDGE.items():
-
-        if key in query_lower and key != "malawi":
-            return (
-                "### Answer\n\n"
-                + answer
-                + "\n\n"
-                "### 🌍 Web Research\n\n"
-                "For current information, MALUMBO AI also searches the web below."
-            )
+    # Check basic local knowledge
+    if "capital" in query_lower and "malawi" in query_lower:
+        return "### Answer\n\n" + MALAWI_KNOWLEDGE["capital malawi"]
 
     sources_text = []
     links = []
@@ -73,20 +69,20 @@ def ai_search(query):
         with DDGS() as ddgs:
 
             results = ddgs.text(
-                query,
+                query + " 2026",
                 max_results=5
             )
 
-            for r in results:
+            for result in results:
 
-                title = r.get("title", "Untitled")
-                body = r.get("body", "")
-                href = r.get("href", "")
+                title = result.get("title", "")
+                body = result.get("body", "")
+                href = result.get("href", "")
 
                 if body:
                     sources_text.append(body)
 
-                if href:
+                if title and href:
                     links.append(
                         f"- [{title}]({href})"
                     )
@@ -95,55 +91,87 @@ def ai_search(query):
 
         return (
             "### Search Error\n\n"
-            f"Web search could not be completed.\n\n"
-            f"Error: `{str(e)}`"
+            "The web search service could not be reached right now.\n\n"
+            f"Technical information: `{e}`"
         )
 
     if sources_text:
 
-        answer = " ".join(sources_text)
-
-        # Keep answer reasonably short
-        answer = answer[:3000]
-
-        response = (
-            "### 🧠 Answer\n\n"
-            + answer
-            + "\n\n"
-            "### 🔗 Sources\n\n"
-            + "\n".join(links)
+        answer = "\n\n".join(
+            sources_text[:5]
         )
 
-        return response
+        if len(answer) > 3000:
+            answer = answer[:3000] + "..."
+
+        result_text = (
+            "### Answer\n\n"
+            + answer
+        )
+
+        if links:
+
+            result_text += (
+                "\n\n### Sources\n\n"
+                + "\n".join(links)
+            )
+
+        return result_text
 
     return (
-        "### No suitable results found\n\n"
-        "Try using a more specific search question."
+        "### Answer\n\n"
+        "I could not find suitable web results for this question."
     )
+
+
+# ============================================================
+# PDF READER
+# ============================================================
+
+def read_pdf(uploaded_file):
+
+    text = ""
+
+    try:
+
+        reader = PyPDF2.PdfReader(uploaded_file)
+
+        for page in reader.pages:
+
+            page_text = page.extract_text()
+
+            if page_text:
+                text += page_text + "\n"
+
+    except Exception as e:
+
+        return f"Could not read PDF: {e}"
+
+    return text
 
 
 # ============================================================
 # CLEAN FILE NAME
 # ============================================================
 
-def clean_filename(text):
+def clean_filename(name):
 
-    text = re.sub(
+    name = re.sub(
         r'[\\/*?:"<>|]',
         "",
-        text
+        name
     )
 
-    text = text.strip()
+    name = name.strip()
 
-    if not text:
-        text = "MALUMBO_AI_Output"
+    if not name:
+        name = "Malumbo_AI_Output"
 
-    return text
+    return name
 
 
 # ============================================================
-# WORD DOCUMENT GENERATOR
+# DOCX GENERATOR
 # ============================================================
 
 def generate_docx(topic):
@@ -151,7 +179,7 @@ def generate_docx(topic):
     doc = Document()
 
     # --------------------------------------------------------
-    # PAGE SETUP
+    # PAGE SETTINGS
     # --------------------------------------------------------
 
     section = doc.sections[0]
@@ -185,26 +213,26 @@ def generate_docx(topic):
 
     for run in title.runs:
         run.font.name = "Times New Roman"
-        run.font.size = Pt(20)
+        run.font.size = Pt(18)
         run.bold = True
 
     # --------------------------------------------------------
-    # SUBTITLE
+    # AUTHOR
     # --------------------------------------------------------
 
-    subtitle = doc.add_paragraph()
+    author = doc.add_paragraph()
 
-    subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    author.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    run = subtitle.add_run(
-        "Academic Paper Generated by MALUMBO AI"
+    run = author.add_run(
+        "Generated by MALUMBO AI"
     )
 
     run.font.name = "Times New Roman"
     run.font.size = Pt(12)
     run.italic = True
 
-    doc.add_paragraph()
+    doc.add_paragraph("")
 
     # --------------------------------------------------------
     # INTRODUCTION
@@ -215,193 +243,220 @@ def generate_docx(topic):
         level=1
     )
 
-    heading.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    heading.runs[0].font.name = "Times New Roman"
 
-    intro = (
-        f"{topic} is an important subject that has attracted "
-        "considerable attention among researchers, policymakers, "
-        "development practitioners and other stakeholders. "
-        "Understanding this topic requires consideration of its "
-        "background, major characteristics, causes, effects and "
-        "possible approaches for addressing associated challenges."
+    intro = doc.add_paragraph()
+
+    intro.add_run(
+        f"{topic} is an important subject that has received "
+        "considerable attention in academic, economic, social, "
+        "environmental and development discussions. Understanding "
+        "this topic requires an examination of its background, "
+        "major characteristics, challenges and potential solutions."
     )
 
-    p = doc.add_paragraph(intro)
-
-    p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    intro.add_run(
+        " This paper discusses the major issues associated with "
+        f"{topic} and considers its broader implications."
+    )
 
     # --------------------------------------------------------
     # BACKGROUND
     # --------------------------------------------------------
 
-    doc.add_heading(
+    heading = doc.add_heading(
         "2. Background",
         level=1
     )
 
-    background = (
+    paragraph = doc.add_paragraph()
+
+    paragraph.add_run(
         f"The background of {topic} can be understood by examining "
-        "the wider economic, social, environmental and institutional "
-        "factors surrounding the issue. Different countries and "
-        "communities may experience the issue differently depending "
-        "on available resources, policies, technology, education, "
-        "markets and institutional support."
+        "the historical, social, economic and institutional factors "
+        "that influence the subject. These factors determine how "
+        "the issue develops and how individuals, organizations and "
+        "governments respond to it."
     )
-
-    p = doc.add_paragraph(background)
-
-    p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
 
     # --------------------------------------------------------
     # MAIN DISCUSSION
     # --------------------------------------------------------
 
-    doc.add_heading(
+    heading = doc.add_heading(
         "3. Main Discussion",
         level=1
     )
 
-    points = [
+    # Point 1
+    sub = doc.add_heading(
+        "3.1 Key Issues",
+        level=2
+    )
 
-        (
-            "3.1 Key Issues",
-            f"One of the major issues associated with {topic} "
-            "is the interaction between individuals, institutions "
-            "and the wider environment. These interactions can "
-            "influence decision-making, resource allocation and "
-            "development outcomes."
-        ),
+    doc.add_paragraph(
+        f"One major aspect of {topic} concerns the factors that "
+        "influence its development and outcomes. These factors may "
+        "include institutional conditions, economic incentives, "
+        "access to information, available resources and individual "
+        "decision-making."
+    )
 
-        (
-            "3.2 Importance",
-            f"{topic} is important because it can influence "
-            "economic performance, household welfare, institutional "
-            "decision-making and long-term development. Understanding "
-            "the issue can therefore help stakeholders design better "
-            "policies and interventions."
-        ),
+    # Point 2
+    sub = doc.add_heading(
+        "3.2 Importance",
+        level=2
+    )
 
-        (
-            "3.3 Challenges",
-            f"Several challenges may affect the management of "
-            f"{topic}. These may include limited financial resources, "
-            "insufficient information, institutional constraints, "
-            "limited access to technology and differences in the "
-            "capacity of stakeholders."
-        ),
+    doc.add_paragraph(
+        f"The importance of {topic} can be observed through its "
+        "effects on individuals, households, businesses, institutions "
+        "and wider society. A proper understanding of the subject "
+        "can support better planning, policy formulation and "
+        "decision-making."
+    )
 
-        (
-            "3.4 Possible Solutions",
-            f"Addressing challenges related to {topic} requires "
-            "a combination of appropriate policies, research, "
-            "education, investment and cooperation among relevant "
-            "stakeholders. Solutions should be based on reliable "
-            "evidence and should consider the circumstances of "
-            "the affected communities."
-        )
+    # Point 3
+    sub = doc.add_heading(
+        "3.3 Challenges",
+        level=2
+    )
 
-    ]
+    doc.add_paragraph(
+        f"Despite the potential benefits associated with {topic}, "
+        "several challenges may limit positive outcomes. These can "
+        "include limited financial resources, inadequate information, "
+        "institutional constraints, technological barriers and "
+        "unequal access to opportunities."
+    )
 
-    for heading_text, paragraph_text in points:
+    # Point 4
+    sub = doc.add_heading(
+        "3.4 Possible Solutions",
+        level=2
+    )
 
-        doc.add_heading(
-            heading_text,
-            level=2
-        )
-
-        p = doc.add_paragraph(
-            paragraph_text
-        )
-
-        p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    doc.add_paragraph(
+        f"Addressing challenges related to {topic} requires "
+        "coordinated action by relevant stakeholders. Possible "
+        "approaches include improving access to information, "
+        "strengthening institutions, investing in appropriate "
+        "technology, improving education and supporting evidence-"
+        "based policy interventions."
+    )
 
     # --------------------------------------------------------
     # MALAWI CONTEXT
     # --------------------------------------------------------
 
-    doc.add_heading(
+    heading = doc.add_heading(
         "4. Malawi Context",
         level=1
     )
 
-    malawi = (
-        f"In Malawi, {topic} should be considered within the "
-        "country's economic and social context. Agriculture plays "
-        "an important role in livelihoods and the national economy, "
-        "while access to markets, finance, information, technology "
-        "and public services can influence development outcomes. "
-        "Consequently, interventions should be adapted to local "
-        "conditions and supported by credible research."
+    doc.add_paragraph(
+        f"In Malawi, {topic} can be examined within the country's "
+        "economic, social and institutional environment. Local "
+        "conditions are important because policies and interventions "
+        "that work in one country may produce different outcomes "
+        "under different circumstances. Therefore, Malawi-specific "
+        "evidence should be considered when making conclusions "
+        "about the topic."
     )
 
-    p = doc.add_paragraph(
-        malawi
+    # --------------------------------------------------------
+    # RECOMMENDATIONS
+    # --------------------------------------------------------
+
+    heading = doc.add_heading(
+        "5. Recommendations",
+        level=1
     )
 
-    p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    recommendations = [
+        "Improve access to reliable information and knowledge.",
+        "Strengthen relevant institutions and stakeholder coordination.",
+        "Promote evidence-based planning and decision-making.",
+        "Increase investment in appropriate technologies and resources.",
+        "Conduct further research using reliable primary and secondary data."
+    ]
+
+    for item in recommendations:
+
+        p = doc.add_paragraph(
+            style="List Bullet"
+        )
+
+        p.add_run(item)
 
     # --------------------------------------------------------
     # CONCLUSION
     # --------------------------------------------------------
 
-    doc.add_heading(
-        "5. Conclusion",
+    heading = doc.add_heading(
+        "6. Conclusion",
         level=1
     )
 
-    conclusion = (
-        f"In conclusion, {topic} is a significant subject that "
-        "requires careful analysis and evidence-based decision-making. "
-        "The discussion has highlighted major issues, importance, "
-        "challenges and possible approaches for addressing the issue. "
-        "Further research and appropriate interventions can contribute "
-        "to better understanding and improved outcomes."
+    doc.add_paragraph(
+        f"In conclusion, {topic} is an important area that requires "
+        "careful analysis and continued research. The discussion "
+        "shows that outcomes are influenced by several interconnected "
+        "factors. Effective responses should therefore consider the "
+        "specific economic, social, institutional and environmental "
+        "conditions surrounding the issue. Further research can help "
+        "generate stronger evidence for policy and practical decision-"
+        "making."
     )
-
-    p = doc.add_paragraph(
-        conclusion
-    )
-
-    p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
 
     # --------------------------------------------------------
     # REFERENCES
     # --------------------------------------------------------
 
-    doc.add_heading(
-        "6. References",
+    heading = doc.add_heading(
+        "References",
         level=1
     )
 
+    doc.add_paragraph(
+        "Note: MALUMBO AI should verify and replace these references "
+        "with real academic sources before the document is submitted "
+        "for academic assessment."
+    )
+
     references = [
-        "Food and Agriculture Organization. Publications and research resources on agriculture and development.",
-        "World Bank. World Development Reports and development research resources.",
-        "International research literature relevant to the selected topic."
+        "World Bank. World Development Indicators.",
+        "Food and Agriculture Organization of the United Nations. FAOSTAT.",
+        "Government of Malawi. National development and sector policy documents.",
+        "Relevant peer-reviewed academic literature on the selected topic."
     ]
 
-    for reference in references:
+    for ref in references:
 
-        p = doc.add_paragraph(
-            reference,
+        doc.add_paragraph(
+            ref,
             style="List Number"
         )
 
-        p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-
     # --------------------------------------------------------
-    # FOOTER
+    # FORMAT ALL PARAGRAPHS
     # --------------------------------------------------------
 
-    footer = section.footer.paragraphs[0]
+    for paragraph in doc.paragraphs:
 
-    footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
 
-    footer_run = footer.add_run(
-        "Generated by MALUMBO AI"
-    )
+        paragraph.paragraph_format.line_spacing = 1.5
+        paragraph.paragraph_format.space_after = Pt(6)
 
-    footer_run.font.name = "Times New Roman"
-    footer_run.font.size = Pt(9)
+        for run in paragraph.runs:
+
+            run.font.name = "Times New Roman"
+            run.font.size = Pt(12)
+
+    # Keep title centered
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    author.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     # --------------------------------------------------------
     # SAVE TO MEMORY
@@ -425,7 +480,7 @@ def generate_pptx(topic):
     prs = Presentation()
 
     # --------------------------------------------------------
-    # SLIDE 1 - TITLE
+    # TITLE SLIDE
     # --------------------------------------------------------
 
     slide = prs.slides.add_slide(
@@ -435,260 +490,34 @@ def generate_pptx(topic):
     slide.shapes.title.text = topic
 
     slide.placeholders[1].text = (
-        "Academic Presentation\n"
         "Generated by MALUMBO AI"
     )
 
     # --------------------------------------------------------
-    # SLIDE 2 - INTRODUCTION
+    # SLIDE FUNCTION
     # --------------------------------------------------------
 
-    slide = prs.slides.add_slide(
-        prs.slide_layouts[1]
-    )
+    def add_content_slide(title, bullets):
 
-    slide.shapes.title.text = "1. Introduction"
+        slide = prs.slides.add_slide(
+            prs.slide_layouts[1]
+        )
 
-    body = slide.placeholders[1]
+        slide.shapes.title.text = title
 
-    body.text = (
-        f"{topic} is an important subject with "
-        "economic, social and developmental implications."
-    )
+        body = slide.placeholders[1]
 
-    bullets = [
-        "Overview of the topic",
-        "Importance of understanding the issue",
-        "Relevance to society and development"
-    ]
+        body.text = bullets[0]
 
-    for item in bullets:
+        for bullet in bullets[1:]:
 
-        p = body.text_frame.add_paragraph()
-        p.text = item
-        p.level = 0
+            paragraph = body.text_frame.add_paragraph()
 
-    # --------------------------------------------------------
-    # SLIDE 3 - BACKGROUND
-    # --------------------------------------------------------
+            paragraph.text = bullet
 
-    slide = prs.slides.add_slide(
-        prs.slide_layouts[1]
-    )
+            paragraph.level = 0
 
-    slide.shapes.title.text = "2. Background"
-
-    body = slide.placeholders[1]
-
-    body.text = (
-        f"The background of {topic} provides the "
-        "foundation for understanding the issue."
-    )
-
-    for item in [
-        "Historical and current context",
-        "Major factors influencing the issue",
-        "Relevant economic and social conditions"
-    ]:
-
-        p = body.text_frame.add_paragraph()
-        p.text = item
-
-    # --------------------------------------------------------
-    # SLIDE 4 - KEY ISSUES
-    # --------------------------------------------------------
-
-    slide = prs.slides.add_slide(
-        prs.slide_layouts[1]
-    )
-
-    slide.shapes.title.text = "3. Key Issues"
-
-    body = slide.placeholders[1]
-
-    body.text = f"Major issues related to {topic} include:"
-
-    for item in [
-        "Resource constraints",
-        "Access to information and technology",
-        "Institutional challenges",
-        "Different stakeholder interests"
-    ]:
-
-        p = body.text_frame.add_paragraph()
-        p.text = item
-
-    # --------------------------------------------------------
-    # SLIDE 5 - IMPORTANCE
-    # --------------------------------------------------------
-
-    slide = prs.slides.add_slide(
-        prs.slide_layouts[1]
-    )
-
-    slide.shapes.title.text = "4. Importance"
-
-    body = slide.placeholders[1]
-
-    body.text = (
-        f"{topic} is important because it can "
-        "affect development and decision-making."
-    )
-
-    for item in [
-        "Supports informed decision-making",
-        "Can influence household welfare",
-        "Can affect economic performance",
-        "Provides opportunities for research and innovation"
-    ]:
-
-        p = body.text_frame.add_paragraph()
-        p.text = item
-
-    # --------------------------------------------------------
-    # SLIDE 6 - CHALLENGES
-    # --------------------------------------------------------
-
-    slide = prs.slides.add_slide(
-        prs.slide_layouts[1]
-    )
-
-    slide.shapes.title.text = "5. Challenges"
-
-    body = slide.placeholders[1]
-
-    body.text = (
-        f"Several challenges may affect {topic}."
-    )
-
-    for item in [
-        "Limited financial resources",
-        "Limited access to technology",
-        "Insufficient information",
-        "Institutional constraints",
-        "Limited technical capacity"
-    ]:
-
-        p = body.text_frame.add_paragraph()
-        p.text = item
-
-    # --------------------------------------------------------
-    # SLIDE 7 - MALAWI CONTEXT
-    # --------------------------------------------------------
-
-    slide = prs.slides.add_slide(
-        prs.slide_layouts[1]
-    )
-
-    slide.shapes.title.text = "6. Malawi Context"
-
-    body = slide.placeholders[1]
-
-    body.text = (
-        f"In Malawi, {topic} can be examined "
-        "within the country's local economic and "
-        "social conditions."
-    )
-
-    for item in [
-        "Agriculture is important to livelihoods",
-        "Rural communities face resource constraints",
-        "Markets and institutions influence outcomes",
-        "Local evidence is important for policy"
-    ]:
-
-        p = body.text_frame.add_paragraph()
-        p.text = item
-
-    # --------------------------------------------------------
-    # SLIDE 8 - POSSIBLE SOLUTIONS
-    # --------------------------------------------------------
-
-    slide = prs.slides.add_slide(
-        prs.slide_layouts[1]
-    )
-
-    slide.shapes.title.text = "7. Possible Solutions"
-
-    body = slide.placeholders[1]
-
-    body.text = (
-        "Potential approaches for addressing the "
-        "challenges include:"
-    )
-
-    for item in [
-        "Evidence-based policies",
-        "Education and awareness",
-        "Investment in technology",
-        "Improved institutional support",
-        "Further research"
-    ]:
-
-        p = body.text_frame.add_paragraph()
-        p.text = item
-
-    # --------------------------------------------------------
-    # SLIDE 9 - RECOMMENDATIONS
-    # --------------------------------------------------------
-
-    slide = prs.slides.add_slide(
-        prs.slide_layouts[1]
-    )
-
-    slide.shapes.title.text = "8. Recommendations"
-
-    body = slide.placeholders[1]
-
-    body.text = (
-        f"Based on the discussion of {topic}, "
-        "the following recommendations can be considered:"
-    )
-
-    for item in [
-        "Strengthen research and evidence generation",
-        "Improve stakeholder cooperation",
-        "Increase access to relevant information",
-        "Support practical and locally appropriate interventions"
-    ]:
-
-        p = body.text_frame.add_paragraph()
-        p.text = item
-
-    # --------------------------------------------------------
-    # SLIDE 10 - CONCLUSION
-    # --------------------------------------------------------
-
-    slide = prs.slides.add_slide(
-        prs.slide_layouts[1]
-    )
-
-    slide.shapes.title.text = "9. Conclusion"
-
-    body = slide.placeholders[1]
-
-    body.text = (
-        f"{topic} is an important issue that "
-        "requires evidence-based analysis and "
-        "appropriate interventions."
-    )
-
-    for item in [
-        "The issue has important development implications",
-        "Challenges require coordinated responses",
-        "Research can support better decision-making",
-        "Thank you"
-    ]:
-
-        p = body.text_frame.add_paragraph()
-        p.text = item
-
-    # --------------------------------------------------------
-    # FORMAT ALL SLIDES
-    # --------------------------------------------------------
-
-    for slide in prs.slides:
-
+        # Format title
         for shape in slide.shapes:
 
             if not hasattr(shape, "text_frame"):
@@ -699,7 +528,151 @@ def generate_pptx(topic):
                 for run in paragraph.runs:
 
                     run.font.name = "Arial"
-                    run.font.size = PPTPt(22)
+                    run.font.size = Pt(24)
+
+        return slide
+
+    # --------------------------------------------------------
+    # SLIDE 2
+    # --------------------------------------------------------
+
+    add_content_slide(
+        "1. Introduction",
+        [
+            f"Overview of {topic}",
+            "Background and context",
+            "Why the topic is important",
+            "Main issues discussed in the presentation"
+        ]
+    )
+
+    # --------------------------------------------------------
+    # SLIDE 3
+    # --------------------------------------------------------
+
+    add_content_slide(
+        "2. Background",
+        [
+            f"Historical and contextual background of {topic}",
+            "Major developments",
+            "Relevant social and economic factors",
+            "Current situation"
+        ]
+    )
+
+    # --------------------------------------------------------
+    # SLIDE 4
+    # --------------------------------------------------------
+
+    add_content_slide(
+        "3. Key Concepts",
+        [
+            f"Important concepts related to {topic}",
+            "Definitions of major terms",
+            "Relationship between key concepts",
+            "Importance of understanding these concepts"
+        ]
+    )
+
+    # --------------------------------------------------------
+    # SLIDE 5
+    # --------------------------------------------------------
+
+    add_content_slide(
+        "4. Major Issues",
+        [
+            f"Major issues associated with {topic}",
+            "Factors influencing outcomes",
+            "Institutional considerations",
+            "Economic and social implications"
+        ]
+    )
+
+    # --------------------------------------------------------
+    # SLIDE 6
+    # --------------------------------------------------------
+
+    add_content_slide(
+        "5. Importance",
+        [
+            f"Why {topic} matters",
+            "Effects on individuals and households",
+            "Effects on organizations and institutions",
+            "Broader development implications"
+        ]
+    )
+
+    # --------------------------------------------------------
+    # SLIDE 7
+    # --------------------------------------------------------
+
+    add_content_slide(
+        "6. Challenges",
+        [
+            "Limited resources",
+            "Information and knowledge gaps",
+            "Institutional constraints",
+            "Technological and financial barriers"
+        ]
+    )
+
+    # --------------------------------------------------------
+    # SLIDE 8
+    # --------------------------------------------------------
+
+    add_content_slide(
+        "7. Malawi Context",
+        [
+            f"Application of {topic} to Malawi",
+            "Local economic conditions",
+            "Institutional environment",
+            "Country-specific challenges and opportunities"
+        ]
+    )
+
+    # --------------------------------------------------------
+    # SLIDE 9
+    # --------------------------------------------------------
+
+    add_content_slide(
+        "8. Recommendations",
+        [
+            "Improve access to information",
+            "Strengthen institutions",
+            "Promote evidence-based decision-making",
+            "Invest in appropriate technologies",
+            "Support further research"
+        ]
+    )
+
+    # --------------------------------------------------------
+    # SLIDE 10
+    # --------------------------------------------------------
+
+    add_content_slide(
+        "9. Conclusion",
+        [
+            f"{topic} requires careful analysis.",
+            "Multiple factors influence outcomes.",
+            "Effective solutions require stakeholder coordination.",
+            "Further research can improve evidence and decision-making."
+        ]
+    )
+
+    # --------------------------------------------------------
+    # REFERENCES SLIDE
+    # --------------------------------------------------------
+
+    add_content_slide(
+        "10. References",
+        [
+            "World Bank — World Development Indicators",
+            "FAO — FAOSTAT",
+            "Government of Malawi publications",
+            "Peer-reviewed academic literature",
+            "Relevant institutional reports"
+        ]
+    )
 
     # --------------------------------------------------------
     # SAVE
@@ -718,53 +691,45 @@ def generate_pptx(topic):
 # TABS
 # ============================================================
 
-tab1, tab2, tab3 = st.tabs(
+tab1, tab2, tab3, tab4 = st.tabs(
     [
-        "1. 🌍 Research & Chat",
-        "2. ✍️ Academic Writing",
-        "3. 📊 Presentation Generator"
+        "🌍 Research & Chat",
+        "✍️ Academic Writing",
+        "📊 Presentation Generator",
+        "📄 PDF Reader"
     ]
 )
 
 
 # ============================================================
-# TAB 1 - RESEARCH
+# TAB 1 — RESEARCH
 # ============================================================
 
 with tab1:
 
     st.header(
-        "🌍 Research The Whole Internet"
-    )
-
-    st.write(
-        "Ask MALUMBO AI a question and search the web "
-        "for relevant information."
+        "🌍 Research The Internet"
     )
 
     query = st.text_input(
-        "Ask anything",
+        "Ask MALUMBO AI anything",
         placeholder="Example: What are the effects of climate change on agriculture?"
     )
 
     if st.button(
         "🔍 Search & Answer",
-        use_container_width=True
+        key="search_button"
     ):
 
         if query.strip():
 
             with st.spinner(
-                "Searching the web..."
+                "Researching the web..."
             ):
 
-                result = ai_search(
-                    query
-                )
+                answer = ai_search(query)
 
-            st.markdown(
-                result
-            )
+            st.markdown(answer)
 
         else:
 
@@ -774,7 +739,7 @@ with tab1:
 
 
 # ============================================================
-# TAB 2 - ACADEMIC WRITING
+# TAB 2 — ACADEMIC WRITING
 # ============================================================
 
 with tab2:
@@ -784,47 +749,48 @@ with tab2:
     )
 
     st.write(
-        "Generate a formatted Word document (.docx)."
+        "Generate a formatted Microsoft Word document."
     )
 
     topic = st.text_input(
         "Essay / Research Paper Topic",
-        placeholder="Example: Effects of Climate Change on Agriculture"
+        placeholder="Example: Effects of Climate Change on Smallholder Farmers in Malawi",
+        key="essay_topic"
     )
 
     if st.button(
         "📝 Generate Full Paper",
-        use_container_width=True
+        key="generate_paper"
     ):
 
         if topic.strip():
 
             with st.spinner(
-                "Creating your academic paper..."
+                "Creating your Word document..."
             ):
 
                 docx_file = generate_docx(
                     topic
                 )
 
-            st.success(
-                "✅ Academic paper generated successfully!"
-            )
-
             filename = (
                 clean_filename(topic)
                 + ".docx"
             )
 
+            st.success(
+                "✅ Academic paper generated successfully!"
+            )
+
             st.download_button(
-                label="📄 Download Full Essay.docx",
+                label="📄 Download Full Essay (.docx)",
                 data=docx_file,
                 file_name=filename,
                 mime=(
-                    "application/vnd.openxmlformats-officedocument."
-                    "wordprocessingml.document"
+                    "application/vnd.openxmlformats-"
+                    "officedocument.wordprocessingml.document"
                 ),
-                use_container_width=True
+                key="download_docx"
             )
 
         else:
@@ -835,27 +801,28 @@ with tab2:
 
 
 # ============================================================
-# TAB 3 - PRESENTATION
+# TAB 3 — PRESENTATION
 # ============================================================
 
 with tab3:
 
     st.header(
-        "📊 Full Presentation Generator"
+        "📊 Full PowerPoint Presentation"
     )
 
     st.write(
-        "Generate a complete PowerPoint presentation (.pptx)."
+        "Generate a 10-slide PowerPoint presentation."
     )
 
     pres_topic = st.text_input(
         "Presentation Topic",
-        placeholder="Example: Marketing in Malawi"
+        placeholder="Example: Marketing in Malawi",
+        key="presentation_topic"
     )
 
     if st.button(
-        "📊 Generate Full Presentation",
-        use_container_width=True
+        "🎯 Generate Full Presentation",
+        key="generate_presentation"
     ):
 
         if pres_topic.strip():
@@ -868,24 +835,24 @@ with tab3:
                     pres_topic
                 )
 
-            st.success(
-                "✅ PowerPoint presentation generated successfully!"
-            )
-
             filename = (
                 clean_filename(pres_topic)
                 + ".pptx"
             )
 
+            st.success(
+                "✅ PowerPoint presentation generated successfully!"
+            )
+
             st.download_button(
-                label="📊 Download Full Presentation.pptx",
+                label="📊 Download Full Presentation (.pptx)",
                 data=pptx_file,
                 file_name=filename,
                 mime=(
                     "application/vnd.openxmlformats-officedocument."
                     "presentationml.presentation"
                 ),
-                use_container_width=True
+                key="download_pptx"
             )
 
         else:
@@ -896,12 +863,64 @@ with tab3:
 
 
 # ============================================================
+# TAB 4 — PDF READER
+# ============================================================
+
+with tab4:
+
+    st.header(
+        "📄 PDF Reader"
+    )
+
+    st.write(
+        "Upload a PDF and MALUMBO AI will extract its text."
+    )
+
+    uploaded_pdf = st.file_uploader(
+        "Upload PDF",
+        type=["pdf"]
+    )
+
+    if uploaded_pdf:
+
+        with st.spinner(
+            "Reading PDF..."
+        ):
+
+            pdf_text = read_pdf(
+                uploaded_pdf
+            )
+
+        if pdf_text.strip():
+
+            st.success(
+                "✅ PDF successfully read."
+            )
+
+            st.text_area(
+                "Extracted PDF Text",
+                pdf_text,
+                height=500
+            )
+
+        else:
+
+            st.warning(
+                "No readable text was found in this PDF."
+            )
+
+
+# ============================================================
 # FOOTER
 # ============================================================
 
 st.divider()
 
 st.caption(
-    "🧠 MALUMBO AI v5.0 — Global AI Research + "
-    "Academic Writer + Presentation Generator"
+    "🧠 MALUMBO AI v5.0 — Full Output Mode"
+)
+
+st.caption(
+    "Always verify AI-generated academic information, "
+    "statistics and references before submission."
 )
