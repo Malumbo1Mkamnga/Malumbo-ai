@@ -1,8 +1,9 @@
 import streamlit as st
-from duckduckgo_search import DDGS
+from duckgo_search import DDGS
 
 # ============================================================
-# MALUMBO AI v6.1 - SAFE MODE
+# MALUMBO AI v7.0
+# LIGHTWEIGHT / SAFE DEPLOYMENT VERSION
 # ============================================================
 
 st.set_page_config(
@@ -11,37 +12,49 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🧠 MALUMBO AI v6.1")
-st.subheader("🌍 AI Research Assistant - Safe Mode")
+st.title("🧠 MALUMBO AI v7.0")
+st.subheader("🌍 Live AI Research Assistant")
 
 
 # ============================================================
-# MALAWI BASIC KNOWLEDGE
+# MALAWI KNOWLEDGE
 # ============================================================
 
 MALAWI_KNOWLEDGE = {
     "capital malawi":
         "The capital city of Malawi is **Lilongwe**.",
 
-    "malawi":
-        "Malawi is a landlocked country in southeastern Africa."
+    "president malawi":
+        "The current President of Malawi should be verified with a current web search before being used for official or academic work.",
+
+    "vice president malawi":
+        "The current Vice President of Malawi should be verified with a current web search before being used for official or academic work."
 }
 
 
 # ============================================================
-# WEB SEARCH FUNCTION
+# SEARCH FUNCTION
 # ============================================================
 
 def ai_search(query):
 
     query_lower = query.lower()
 
-    # Basic Malawi answers
+    # --------------------------------------------------------
+    # QUICK MALAWI ANSWERS
+    # --------------------------------------------------------
+
     if "capital" in query_lower and "malawi" in query_lower:
+
         return (
-            "### Answer\n\n"
-            "The capital city of Malawi is **Lilongwe**."
+            "### ✅ Answer\n\n"
+            "The capital city of Malawi is **Lilongwe**.\n\n"
+            "*From MALUMBO AI Malawi knowledge*"
         )
+
+    # --------------------------------------------------------
+    # WHOLE INTERNET SEARCH
+    # --------------------------------------------------------
 
     sources_text = ""
     links = []
@@ -62,9 +75,13 @@ def ai_search(query):
                 href = result.get("href", "")
 
                 if body:
-                    sources_text += body + "\n\n"
+
+                    sources_text += (
+                        body + "\n\n"
+                    )
 
                 if title and href:
+
                     links.append(
                         f"- [{title}]({href})"
                     )
@@ -72,17 +89,21 @@ def ai_search(query):
     except Exception as e:
 
         return (
-            "### Search Error\n\n"
-            f"`{e}`\n\n"
-            "Please try again later."
+            "### ❌ Search Error\n\n"
+            f"Search failed: `{e}`\n\n"
+            "Please try again."
         )
+
+    # --------------------------------------------------------
+    # RESULTS
+    # --------------------------------------------------------
 
     if sources_text:
 
         answer = sources_text[:2500]
 
         response = (
-            "### Answer\n\n"
+            "### ✅ Answer\n\n"
             + answer
         )
 
@@ -96,8 +117,8 @@ def ai_search(query):
         return response
 
     return (
-        "### Answer\n\n"
-        "No suitable web results were found."
+        "### ⚠️ No Results\n\n"
+        "No suitable search results were found."
     )
 
 
@@ -115,44 +136,49 @@ tab1, tab2, tab3 = st.tabs(
 
 
 # ============================================================
-# TAB 1 - RESEARCH
+# TAB 1 — RESEARCH
 # ============================================================
 
 with tab1:
 
     st.header(
-        "🌍 Research The Internet"
+        "🌍 Research The Whole Internet"
     )
 
     query = st.text_input(
         "Ask anything",
-        placeholder="Example: What are the effects of climate change on agriculture?"
+        placeholder=(
+            "News, academic research, Malawi, USA, "
+            "agriculture, economics, technology..."
+        )
     )
 
     if st.button(
         "🔍 Search & Answer",
-        key="search"
+        key="search_button"
     ):
 
         if query.strip():
 
             with st.spinner(
-                "Searching the web..."
+                "🔎 Searching the internet..."
             ):
 
-                answer = ai_search(query)
+                result = ai_search(
+                    query
+                )
 
-            st.markdown(answer)
+            st.markdown(result)
 
         else:
 
             st.warning(
-                "Please type a question first."
+                "Please enter a question first."
             )
 
 
 # ============================================================
-# TAB 2 - ACADEMIC WRITING
+# TAB 2 — ACADEMIC WRITING
 # ============================================================
 
 with tab2:
@@ -162,36 +188,48 @@ with tab2:
     )
 
     st.info(
-        "DOCX generation will be added after the safe version "
+        "🚧 Full .docx academic document generation "
+        "will be added after the lightweight version "
         "is confirmed to be running."
     )
 
-    topic = st.text_input(
-        "Essay / Research Topic",
-        placeholder="Example: Conservation Agriculture in Malawi",
+    academic_topic = st.text_input(
+        "Enter your academic topic",
+        placeholder=(
+            "Example: Factors Affecting Adoption "
+            "of Conservation Agriculture"
+        ),
         key="academic_topic"
     )
 
     if st.button(
-        "📝 Generate Paper",
+        "📝 Generate Academic Paper",
         key="academic_button"
     ):
 
-        if topic.strip():
+        if academic_topic.strip():
 
             st.success(
-                "Topic received: " + topic
+                "Topic received successfully!"
+            )
+
+            st.write(
+                "Your topic:"
+            )
+
+            st.write(
+                academic_topic
             )
 
         else:
 
             st.warning(
-                "Please enter a topic."
+                "Please enter an academic topic."
             )
 
 
 # ============================================================
-# TAB 3 - PRESENTATION
+# TAB 3 — PRESENTATION GENERATOR
 # ============================================================
 
 with tab3:
@@ -201,13 +239,16 @@ with tab3:
     )
 
     st.info(
-        "PPTX generation will be added after the safe version "
+        "🚧 Full .pptx PowerPoint generation "
+        "will be added after the lightweight version "
         "is confirmed to be running."
     )
 
     presentation_topic = st.text_input(
-        "Presentation Topic",
-        placeholder="Example: Marketing in Malawi",
+        "Enter your presentation topic",
+        placeholder=(
+            "Example: Marketing in Malawi"
+        ),
         key="presentation_topic"
     )
 
@@ -219,7 +260,15 @@ with tab3:
         if presentation_topic.strip():
 
             st.success(
-                "Topic received: " + presentation_topic
+                "Presentation topic received successfully!"
+            )
+
+            st.write(
+                "Your topic:"
+            )
+
+            st.write(
+                presentation_topic
             )
 
         else:
@@ -236,5 +285,9 @@ with tab3:
 st.divider()
 
 st.caption(
-    "🧠 MALUMBO AI v6.1 — Safe Mode"
+    "🧠 MALUMBO AI v7.0 — Lightweight Deployment"
+)
+
+st.caption(
+    "🌍 Research • Academic Writing • Presentations"
 )
