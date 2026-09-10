@@ -1,12 +1,10 @@
 import streamlit as st
-import pandas as pd
-from docx import Document
 import PyPDF2
+from docx import Document
 from duckduckgo_search import DDGS
-import io
 
 # ============================================================
-# MALUMBO AI ASSISTANT
+# MALUMBO AI - MALAWI SMART ASSISTANT
 # ============================================================
 
 st.set_page_config(
@@ -15,927 +13,614 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🧠 MALUMBO AI ASSISTANT")
-st.markdown(
-    "### *Your Academic, Research & Business Copilot - Forever Online*"
-)
-
-st.markdown(
-    "Upload PDFs, DOCX, CSVs, search the web, chat with documents, "
-    "write academic work and create presentation content."
-)
-
-st.divider()
+st.title("🧠 MALUMBO AI - Malawi Smart Assistant")
+st.write("🇲🇼 Your smart academic, document and Malawi information assistant")
 
 # ============================================================
 # TABS
 # ============================================================
 
-tab1, tab2, tab3 = st.tabs(
-    [
-        "1. Multi-File Chat",
-        "2. Academic Writing",
-        "3. Presentation Generator"
-    ]
-)
+tabs = st.tabs([
+    "1. Multi-File Chat",
+    "2. Academic Writing",
+    "3. Presentation Generator"
+])
 
 # ============================================================
-# TAB 1: MULTI-FILE CHAT
+# SMART SEARCH FUNCTION
 # ============================================================
 
-with tab1:
+def smart_search(query):
+
+    # Add Malawi automatically
+    if "malawi" not in query.lower():
+        query = query + " Malawi"
+
+    # Prioritize Malawi news websites
+    search_query = (
+        query
+        + " 2026 "
+        + "(site:nyasatimes.com OR "
+          "site:malawi24.com OR "
+          "site:times.mw)"
+    )
+
+    results = []
+
+    try:
+        with DDGS() as ddgs:
+
+            search_results = ddgs.text(
+                search_query,
+                max_results=5
+            )
+
+            for r in search_results:
+
+                title = r.get("title", "No title")
+                href = r.get("href", "")
+                body = r.get("body", "")
+
+                results.append(
+                    f"**{title}**\n\n"
+                    f"[Open source]({href})\n\n"
+                    f"{body}"
+                )
+
+    except Exception as e:
+
+        results = [
+            "⚠️ Web search failed.",
+            "I can still help using the information available to me."
+        ]
+
+    # If there are no search results
+    if not results:
+
+        results = [
+            "⚠️ I could not find suitable web results.",
+            "Try another search question."
+        ]
+
+    return results
+
+
+# ============================================================
+# FILE READER
+# ============================================================
+
+def read_file(uploaded_file):
+
+    text = ""
+
+    try:
+
+        # ---------------- PDF ----------------
+        if uploaded_file.name.lower().endswith(".pdf"):
+
+            pdf_reader = PyPDF2.PdfReader(uploaded_file)
+
+            for page in pdf_reader.pages:
+
+                page_text = page.extract_text()
+
+                if page_text:
+                    text += page_text + "\n"
+
+        # ---------------- DOCX ----------------
+        elif uploaded_file.name.lower().endswith(".docx"):
+
+            doc = Document(uploaded_file)
+
+            for para in doc.paragraphs:
+
+                if para.text.strip():
+                    text += para.text + "\n"
+
+        # ---------------- CSV ----------------
+        elif uploaded_file.name.lower().endswith(".csv"):
+
+            text = uploaded_file.read().decode(
+                "utf-8",
+                errors="ignore"
+            )
+
+    except Exception as e:
+
+        text = f"Could not read file: {e}"
+
+    return text
+
+
+# ============================================================
+# TAB 1 - MULTI-FILE CHAT
+# ============================================================
+
+with tabs[0]:
 
     st.header("📁 Upload & Chat With Your Documents")
 
-    uploaded_files = st.file_uploader(
-        "Upload PDF, DOCX or CSV files",
-        type=["pdf", "docx", "csv"],
-        accept_multiple_files=True
+    st.write(
+        "Upload PDF, DOCX or CSV files and ask questions about them."
     )
 
-    context = ""
+    uploaded_files = st.file_uploader(
+        "Upload your files",
+        accept_multiple_files=True,
+        type=["pdf", "docx", "csv"]
+    )
+
+    # --------------------------------------------------------
+    # SHOW UPLOADED FILES
+    # --------------------------------------------------------
+
+    if uploaded_files:
+
+        st.success(
+            f"✅ {len(uploaded_files)} file(s) uploaded successfully."
+        )
+
+        for file in uploaded_files:
+
+            st.write(
+                f"📄 **{file.name}**"
+            )
+
+    # --------------------------------------------------------
+    # READ FILES
+    # --------------------------------------------------------
+
+    combined_text = ""
 
     if uploaded_files:
 
         for file in uploaded_files:
 
-            # ---------------- PDF ----------------
-            if file.name.lower().endswith(".pdf"):
+            file_text = read_file(file)
 
-                try:
-                    reader = PyPDF2.PdfReader(file)
+            combined_text += (
+                "\n\n"
+                + "=" * 60
+                + "\n"
+                + f"FILE: {file.name}"
+                + "\n"
+                + "=" * 60
+                + "\n"
+                + file_text
+            )
 
-                    for page in reader.pages:
-
-                        text = page.extract_text()
-
-                        if text:
-                            context += "\n" + text
-
-                except Exception as e:
-                    st.error(
-                        f"Could not read {file.name}: {e}"
-                    )
-
-            # ---------------- DOCX ----------------
-            elif file.name.lower().endswith(".docx"):
-
-                try:
-                    doc = Document(file)
-
-                    for paragraph in doc.paragraphs:
-                        context += "\n" + paragraph.text
-
-                except Exception as e:
-                    st.error(
-                        f"Could not read {file.name}: {e}"
-                    )
-
-            # ---------------- CSV ----------------
-            elif file.name.lower().endswith(".csv"):
-
-                try:
-                    df = pd.read_csv(file)
-
-                    st.subheader(f"📊 {file.name}")
-                    st.dataframe(
-                        df,
-                        use_container_width=True
-                    )
-
-                    context += "\n" + df.to_string()
-
-                except Exception as e:
-                    st.error(
-                        f"Could not read {file.name}: {e}"
-                    )
-
-        st.success(
-            f"✅ Successfully loaded {len(uploaded_files)} file(s)!"
-        )
-
-    st.divider()
+    # --------------------------------------------------------
+    # QUESTION
+    # --------------------------------------------------------
 
     query = st.text_input(
-        "Ask something about your files or search the web:"
+        "Ask something about your files or search the web:",
+        placeholder="Example: What is the main objective of this document?"
     )
 
-    col1, col2 = st.columns(2)
+    # --------------------------------------------------------
+    # FILE CHAT
+    # --------------------------------------------------------
 
-    # ========================================================
+    if uploaded_files and query:
+
+        st.subheader("📖 Information From Your Files")
+
+        query_lower = query.lower()
+
+        # Simple keyword-based document search
+        words = [
+            word.strip(".,!?")
+            for word in query_lower.split()
+            if len(word.strip(".,!?")) > 3
+        ]
+
+        matching_sections = []
+
+        for section in combined_text.split("=" * 60):
+
+            section_lower = section.lower()
+
+            score = sum(
+                1 for word in words
+                if word in section_lower
+            )
+
+            if score > 0:
+
+                matching_sections.append(
+                    (score, section)
+                )
+
+        matching_sections.sort(
+            key=lambda x: x[0],
+            reverse=True
+        )
+
+        if matching_sections:
+
+            st.info(
+                "🔎 I found information in your uploaded files."
+            )
+
+            shown = 0
+
+            for score, section in matching_sections:
+
+                if shown >= 3:
+                    break
+
+                st.write(section[:5000])
+
+                st.divider()
+
+                shown += 1
+
+        else:
+
+            st.warning(
+                "I couldn't find an exact match in your uploaded files."
+            )
+
+    # --------------------------------------------------------
     # WEB SEARCH
-    # ========================================================
+    # --------------------------------------------------------
 
-    with col1:
+    if st.button("🔍 Search Malawi Web"):
 
-        if st.button(
-            "🌐 Search Web",
-            use_container_width=True
-        ):
+        if query:
 
-            if query:
+            with st.spinner(
+                "🔎 Searching Malawi information..."
+            ):
 
-                with st.spinner("Searching the web..."):
+                results = smart_search(query)
 
-                    try:
-
-                        results = DDGS().text(
-                            query,
-                            max_results=5
-                        )
-
-                        results = list(results)
-
-                        if results:
-
-                            st.subheader("🌐 Search Results")
-
-                            for result in results:
-
-                                title = result.get(
-                                    "title",
-                                    "No title"
-                                )
-
-                                body = result.get(
-                                    "body",
-                                    ""
-                                )
-
-                                href = result.get(
-                                    "href",
-                                    ""
-                                )
-
-                                st.markdown(
-                                    f"### {title}"
-                                )
-
-                                st.write(body)
-
-                                if href:
-                                    st.markdown(
-                                        f"🔗 {href}"
-                                    )
-
-                                st.divider()
-
-                        else:
-
-                            st.warning(
-                                "No search results found."
-                            )
-
-                    except Exception as e:
-
-                        st.error(
-                            f"Web search error: {e}"
-                        )
-
-            else:
-
-                st.warning(
-                    "Please enter a search question first."
+                st.subheader(
+                    "🌐 Web Search Results"
                 )
 
-    # ========================================================
-    # ANSWER FROM FILES
-    # ========================================================
+                for result in results:
 
-    with col2:
+                    st.write(result)
 
-        if st.button(
-            "📄 Answer From Files",
-            use_container_width=True
-        ):
+                    st.divider()
 
-            if not context:
+        else:
 
-                st.warning(
-                    "Please upload at least one file first."
-                )
-
-            elif not query:
-
-                st.warning(
-                    "Please enter a question."
-                )
-
-            else:
-
-                st.subheader("📄 Information From Your Files")
-
-                st.write(
-                    "Relevant document content:"
-                )
-
-                st.info(
-                    context[:5000]
-                )
+            st.warning(
+                "Please enter a question first."
+            )
 
 
 # ============================================================
-# TAB 2: ACADEMIC WRITING
+# TAB 2 - ACADEMIC WRITING
 # ============================================================
 
-with tab2:
+with tabs[1]:
 
-    st.header("✍️ Academic Writing Assistant")
+    st.header("🎓 Academic Writing Assistant")
 
-    task = st.selectbox(
-        "Task Type",
+    st.write(
+        "Use MALUMBO AI to organize your academic work, "
+        "research ideas and assignments."
+    )
+
+    topic = st.text_input(
+        "Enter your academic topic:",
+        placeholder="Example: Factors affecting adoption of conservation agriculture"
+    )
+
+    academic_type = st.selectbox(
+        "What do you want to create?",
         [
-            "Assignment Questions",
-            "Essay",
-            "Research Proposal",
+            "Introduction",
+            "Problem Statement",
+            "Justification",
+            "Objectives",
+            "Research Questions",
             "Literature Review",
-            "Research Report",
-            "CV/Resume"
+            "Methodology",
+            "Conclusion",
+            "Assignment Outline"
         ]
     )
 
-    instructions = st.text_area(
-        "Paste Assignment Instructions / Question Here",
-        height=220
-    )
+    if st.button("✍️ Generate Academic Structure"):
 
-    words = st.slider(
-        "Target Word Count",
-        250,
-        5000,
-        1000
-    )
+        if topic:
 
-    academic_level = st.selectbox(
-        "Academic Level",
-        [
-            "Certificate",
-            "Diploma",
-            "Undergraduate",
-            "Postgraduate"
-        ]
-    )
-
-    referencing = st.selectbox(
-        "Referencing Style",
-        [
-            "APA 7th Edition",
-            "Harvard",
-            "MLA",
-            "Chicago",
-            "No Referencing"
-        ]
-    )
-
-    if st.button(
-        "🚀 Generate Academic Draft",
-        use_container_width=True
-    ):
-
-        if instructions.strip():
-
-            st.success(
-                f"Ready to generate a {words}-word "
-                f"{task} for {academic_level} level."
+            st.subheader(
+                f"📚 {academic_type}"
             )
 
-            st.subheader("📝 Draft Structure")
-
-            st.write(
-                f"""
-                **Task:** {task}
-
-                **Academic Level:** {academic_level}
-
-                **Target Words:** {words}
-
-                **Referencing:** {referencing}
-
-                **Instructions Provided:**
-
-                {instructions}
-                """
-            )
-
-            st.divider()
-
-            st.markdown("### Suggested Academic Structure")
-
-            if task == "Assignment Questions":
+            if academic_type == "Introduction":
 
                 st.write(
-                    """
-                    **1. Introduction**
+                    f"""
+                    **Topic:** {topic}
 
-                    Introduce the topic and explain the purpose
-                    of the assignment.
+                    An introduction should provide the background
+                    of the study, explain the importance of the
+                    topic, describe the existing situation and
+                    introduce the specific research problem.
 
-                    **2. Main Discussion**
-
-                    Address each assignment question clearly.
-                    Use relevant concepts, theories, evidence and
-                    examples.
-
-                    **3. Critical Analysis**
-
-                    Compare ideas, discuss strengths and weaknesses,
-                    and provide evidence-based arguments.
-
-                    **4. Conclusion**
-
-                    Summarize the major findings and arguments.
-
-                    **5. References**
-
-                    Provide references using the selected
-                    referencing style.
+                    The introduction should move from the broad
+                    context to the specific study area and clearly
+                    establish why the research is necessary.
                     """
                 )
 
-            elif task == "Research Proposal":
+            elif academic_type == "Problem Statement":
 
                 st.write(
-                    """
-                    **1. Introduction**
+                    f"""
+                    **Topic:** {topic}
 
-                    **2. Background of the Study**
+                    The problem statement should explain the
+                    existing problem, provide evidence of its
+                    magnitude, identify weaknesses in existing
+                    knowledge and clearly show the research gap.
 
-                    **3. Problem Statement**
-
-                    **4. Justification**
-
-                    **5. Objectives**
-
-                    **6. Research Questions / Hypotheses**
-
-                    **7. Literature Review**
-
-                    **8. Theoretical / Conceptual Framework**
-
-                    **9. Methodology**
-
-                    **10. Ethical Considerations**
-
-                    **11. References**
+                    The final part should explain why the proposed
+                    study is necessary.
                     """
                 )
 
-            elif task == "Essay":
+            elif academic_type == "Justification":
 
                 st.write(
-                    """
-                    **1. Introduction**
+                    f"""
+                    **Topic:** {topic}
 
-                    Present the topic, background and thesis.
-
-                    **2. Body Paragraphs**
-
-                    Develop the major arguments using evidence.
-
-                    **3. Critical Discussion**
-
-                    Compare different perspectives and evidence.
-
-                    **4. Conclusion**
-
-                    Summarize the argument and key findings.
-
-                    **5. References**
+                    The justification should explain why the study
+                    is important and identify the groups or
+                    institutions that may benefit from the findings.
                     """
                 )
 
-            elif task == "Literature Review":
+            elif academic_type == "Objectives":
 
                 st.write(
-                    """
-                    **1. Introduction**
+                    f"""
+                    **General Objective**
 
-                    **2. Conceptual Review**
+                    To investigate {topic}.
 
-                    **3. Theoretical Review**
+                    **Specific Objectives**
 
-                    **4. Empirical Review**
-
-                    **5. Critical Analysis of Previous Studies**
-
-                    **6. Research Gap**
-
-                    **7. Conclusion**
-
-                    **8. References**
+                    1. To examine the factors associated with {topic}.
+                    2. To assess the effects associated with {topic}.
+                    3. To identify possible measures for improving the situation.
                     """
                 )
 
-            elif task == "Research Report":
+            elif academic_type == "Research Questions":
 
                 st.write(
+                    f"""
+                    1. What factors influence {topic}?
+
+                    2. What effects are associated with {topic}?
+
+                    3. What measures can improve the situation?
                     """
-                    **1. Introduction**
+                )
 
-                    **2. Methodology**
+            elif academic_type == "Methodology":
 
-                    **3. Results / Findings**
+                st.write(
+                    f"""
+                    A methodology section for **{topic}** should
+                    normally describe:
 
-                    **4. Discussion**
+                    • Study area
 
-                    **5. Conclusion**
+                    • Research design
 
-                    **6. Recommendations**
+                    • Target population
 
-                    **7. References**
+                    • Sampling procedure
+
+                    • Sample size
+
+                    • Data sources
+
+                    • Data collection methods
+
+                    • Variables
+
+                    • Data analysis methods
+
+                    • Econometric model, where applicable
+
+                    • Ethical considerations
+                    """
+                )
+
+            elif academic_type == "Literature Review":
+
+                st.write(
+                    f"""
+                    The literature review for **{topic}** should
+                    critically examine previous theoretical and
+                    empirical studies.
+
+                    It should identify:
+
+                    • Major theories
+
+                    • Previous empirical findings
+
+                    • Methodologies used by previous researchers
+
+                    • Areas of agreement and disagreement
+
+                    • Limitations of previous studies
+
+                    • The research gap addressed by the current study
+                    """
+                )
+
+            elif academic_type == "Conclusion":
+
+                st.write(
+                    f"""
+                    A conclusion for **{topic}** should summarize
+                    the major findings, relate them to the research
+                    objectives and provide appropriate implications
+                    or recommendations.
                     """
                 )
 
             else:
 
                 st.write(
-                    """
-                    **Professional CV Structure**
+                    f"""
+                    **Assignment topic:** {topic}
 
-                    - Personal / Contact Information
-                    - Professional Profile
-                    - Education
-                    - Work / Attachment Experience
-                    - Skills
-                    - Research Experience
-                    - Certifications
-                    - References
+                    Recommended structure:
+
+                    1. Introduction
+                    2. Background
+                    3. Main discussion
+                    4. Evidence from literature
+                    5. Critical analysis
+                    6. Examples
+                    7. Conclusion
+                    8. References
                     """
                 )
 
         else:
 
             st.warning(
-                "⚠️ Please paste the assignment instructions first."
+                "Please enter an academic topic."
             )
 
 
 # ============================================================
-# TAB 3: PRESENTATION GENERATOR
+# TAB 3 - PRESENTATION GENERATOR
 # ============================================================
 
-with tab3:
+with tabs[2]:
 
-    st.header("🎤 Presentation Generator")
+    st.header("📊 Presentation Generator")
 
-    st.markdown(
-        "Create a structured academic presentation from your "
-        "topic, assignment or research proposal."
+    st.write(
+        "Create a simple presentation structure from your topic."
     )
 
-    presentation_title = st.text_input(
-        "Presentation Title",
-        placeholder="Example: Factors Affecting Adoption of Conservation Agriculture"
+    presentation_topic = st.text_input(
+        "Enter presentation topic:",
+        placeholder="Example: Conservation Agriculture Adoption in Malawi"
     )
 
-    presentation_topic = st.text_area(
-        "Paste your topic, assignment, research proposal or notes:",
-        height=250
+    number_slides = st.slider(
+        "Number of slides",
+        min_value=5,
+        max_value=20,
+        value=10
     )
 
-    number_of_slides = st.slider(
-        "Number of Slides",
-        5,
-        30,
-        12
-    )
+    if st.button("🎯 Generate Presentation"):
 
-    presentation_style = st.selectbox(
-        "Presentation Style",
-        [
-            "Academic Defense",
-            "Class Assignment",
-            "Research Proposal",
-            "Business Presentation",
-            "General Presentation"
-        ]
-    )
-
-    if st.button(
-        "🎨 Generate Presentation",
-        use_container_width=True
-    ):
-
-        if not presentation_title.strip():
-
-            st.warning(
-                "Please enter a presentation title."
-            )
-
-        elif not presentation_topic.strip():
-
-            st.warning(
-                "Please paste your topic or content."
-            )
-
-        else:
+        if presentation_topic:
 
             st.success(
-                f"✅ Creating a {number_of_slides}-slide "
-                f"{presentation_style} structure."
+                "✅ Presentation structure generated!"
             )
 
-            st.divider()
+            slides = [
+                ("Title", presentation_topic),
 
-            # =================================================
-            # ACADEMIC DEFENSE
-            # =================================================
-
-            if presentation_style == "Academic Defense":
-
-                slide_titles = [
-                    "Title Page",
+                (
                     "Introduction",
-                    "Background of the Study",
+                    "Background and overview of the topic"
+                ),
+
+                (
                     "Problem Statement",
-                    "Justification of the Study",
-                    "Research Objectives",
-                    "Research Questions / Hypotheses",
-                    "Literature Review",
-                    "Theoretical Framework",
-                    "Conceptual Framework",
-                    "Methodology",
-                    "Study Area",
-                    "Sampling and Sample Size",
-                    "Data Collection",
-                    "Data Analysis",
-                    "Ethical Considerations",
-                    "Expected Results",
-                    "Conclusion",
-                    "Recommendations",
-                    "References"
-                ]
+                    "Key problem, evidence and research gap"
+                ),
 
-            # =================================================
-            # RESEARCH PROPOSAL
-            # =================================================
-
-            elif presentation_style == "Research Proposal":
-
-                slide_titles = [
-                    "Title Page",
-                    "Introduction",
-                    "Background",
-                    "Problem Statement",
+                (
                     "Justification",
-                    "Main Objective",
+                    "Why the study or topic is important"
+                ),
+
+                (
+                    "General Objective",
+                    f"To investigate {presentation_topic}"
+                ),
+
+                (
                     "Specific Objectives",
+                    "Present the major specific objectives"
+                ),
+
+                (
                     "Research Questions",
+                    "Present the questions addressed by the study"
+                ),
+
+                (
                     "Literature Review",
-                    "Research Gap",
-                    "Theoretical Framework",
-                    "Conceptual Framework",
+                    "Theories and empirical evidence"
+                ),
+
+                (
                     "Methodology",
-                    "Study Area",
-                    "Research Design",
-                    "Sampling",
-                    "Data Collection",
+                    "Research design, sampling and data collection"
+                ),
+
+                (
                     "Data Analysis",
-                    "Ethical Considerations",
-                    "References"
-                ]
+                    "Statistical and/or econometric methods"
+                ),
 
-            # =================================================
-            # CLASS ASSIGNMENT
-            # =================================================
+                (
+                    "Expected Findings",
+                    "Expected results and implications"
+                ),
 
-            elif presentation_style == "Class Assignment":
-
-                slide_titles = [
-                    "Title Page",
-                    "Introduction",
-                    "Background",
-                    "Key Concepts",
-                    "Main Issue",
-                    "Analysis",
-                    "Evidence",
-                    "Examples",
-                    "Challenges",
-                    "Possible Solutions",
-                    "Recommendations",
+                (
                     "Conclusion",
-                    "References"
-                ]
+                    "Summary of the major points"
+                ),
 
-            # =================================================
-            # BUSINESS
-            # =================================================
-
-            elif presentation_style == "Business Presentation":
-
-                slide_titles = [
-                    "Title",
-                    "Executive Summary",
-                    "Background",
-                    "Problem",
-                    "Market / Situation Analysis",
-                    "Proposed Solution",
-                    "Technology / Strategy",
-                    "Implementation Plan",
-                    "Benefits",
-                    "Risks and Challenges",
-                    "Financial Considerations",
+                (
                     "Recommendations",
-                    "Conclusion"
-                ]
+                    "Practical recommendations"
+                ),
 
-            # =================================================
-            # GENERAL
-            # =================================================
-
-            else:
-
-                slide_titles = [
-                    "Title",
-                    "Introduction",
-                    "Background",
-                    "Key Issues",
-                    "Main Discussion",
-                    "Analysis",
-                    "Evidence",
-                    "Examples",
-                    "Challenges",
-                    "Solutions",
-                    "Recommendations",
-                    "Conclusion",
-                    "References"
-                ]
-
-            # Limit number of slides selected by user
-            selected_titles = slide_titles[:number_of_slides]
-
-            # If user selects more slides than available,
-            # automatically add additional slides.
-            while len(selected_titles) < number_of_slides:
-
-                selected_titles.append(
-                    f"Additional Discussion {len(selected_titles) + 1}"
+                (
+                    "References",
+                    "Major sources used"
                 )
+            ]
 
-            # =================================================
-            # DISPLAY SLIDES
-            # =================================================
+            selected_slides = slides[:number_slides]
 
-            for i, slide_title in enumerate(
-                selected_titles,
+            for i, (title, content) in enumerate(
+                selected_slides,
                 start=1
             ):
 
                 st.subheader(
-                    f"Slide {i}: {slide_title}"
+                    f"Slide {i}: {title}"
                 )
 
-                if i == 1:
-
-                    st.write(
-                        f"**{presentation_title}**"
-                    )
-
-                    st.write(
-                        "Name of Presenter"
-                    )
-
-                    st.write(
-                        "Institution / Course / Date"
-                    )
-
-                elif slide_title == "Introduction":
-
-                    st.markdown(
-                        """
-                        - Introduce the main topic.
-                        - Explain the purpose of the presentation.
-                        - Provide a brief overview of what will be discussed.
-                        """
-                    )
-
-                elif slide_title == "Background of the Study" or slide_title == "Background":
-
-                    st.markdown(
-                        """
-                        - Provide relevant background information.
-                        - Explain the context of the problem.
-                        - Present important evidence and statistics.
-                        - Highlight why the topic is important.
-                        """
-                    )
-
-                elif slide_title == "Problem Statement":
-
-                    st.markdown(
-                        """
-                        - Explain the existing problem.
-                        - Present evidence showing the magnitude of the problem.
-                        - Identify weaknesses in previous knowledge or interventions.
-                        - State the research gap.
-                        """
-                    )
-
-                elif slide_title == "Justification of the Study" or slide_title == "Justification":
-
-                    st.markdown(
-                        """
-                        - Explain why the study is necessary.
-                        - Identify who will benefit from the study.
-                        - Explain the expected contribution of the research.
-                        """
-                    )
-
-                elif slide_title == "Research Objectives" or slide_title == "Specific Objectives":
-
-                    st.markdown(
-                        """
-                        - Main objective
-                        - Specific objective 1
-                        - Specific objective 2
-                        - Specific objective 3
-                        """
-                    )
-
-                elif slide_title == "Research Questions / Hypotheses" or slide_title == "Research Questions":
-
-                    st.markdown(
-                        """
-                        - Research Question 1
-                        - Research Question 2
-                        - Research Question 3
-                        - Corresponding hypotheses where applicable
-                        """
-                    )
-
-                elif slide_title == "Literature Review":
-
-                    st.markdown(
-                        """
-                        - Review relevant concepts.
-                        - Present theoretical perspectives.
-                        - Discuss empirical evidence.
-                        - Compare findings from previous studies.
-                        - Identify limitations and gaps.
-                        """
-                    )
-
-                elif slide_title == "Research Gap":
-
-                    st.markdown(
-                        """
-                        - What previous studies have established.
-                        - What previous studies have not adequately addressed.
-                        - How the current study addresses the gap.
-                        """
-                    )
-
-                elif slide_title == "Theoretical Framework":
-
-                    st.markdown(
-                        """
-                        - Present the theory guiding the study.
-                        - Explain the main concepts of the theory.
-                        - Show how the theory relates to the research problem.
-                        """
-                    )
-
-                elif slide_title == "Conceptual Framework":
-
-                    st.markdown(
-                        """
-                        **Independent Variables**
-                        
-                        ↓
-                        
-                        **Factors influencing the outcome**
-                        
-                        ↓
-                        
-                        **Dependent Variable**
-                        
-                        Explain the expected relationships among variables.
-                        """
-                    )
-
-                elif slide_title == "Methodology":
-
-                    st.markdown(
-                        """
-                        - Research design
-                        - Study population
-                        - Study area
-                        - Sampling procedure
-                        - Data sources
-                        - Data collection methods
-                        - Data analysis methods
-                        """
-                    )
-
-                elif slide_title == "Study Area":
-
-                    st.markdown(
-                        """
-                        - Location of the study
-                        - Population
-                        - Main economic activities
-                        - Agricultural characteristics
-                        - Relevant environmental conditions
-                        """
-                    )
-
-                elif slide_title == "Sampling and Sample Size" or slide_title == "Sampling":
-
-                    st.markdown(
-                        """
-                        - Target population
-                        - Sampling technique
-                        - Sample size
-                        - Inclusion criteria
-                        """
-                    )
-
-                elif slide_title == "Data Collection":
-
-                    st.markdown(
-                        """
-                        - Primary data
-                        - Secondary data
-                        - Questionnaires
-                        - Interviews / focus groups where applicable
-                        """
-                    )
-
-                elif slide_title == "Data Analysis":
-
-                    st.markdown(
-                        """
-                        - Descriptive statistics
-                        - Econometric analysis where applicable
-                        - Hypothesis testing
-                        - Statistical software
-                        """
-                    )
-
-                elif slide_title == "Ethical Considerations":
-
-                    st.markdown(
-                        """
-                        - Informed consent
-                        - Confidentiality
-                        - Voluntary participation
-                        - Protection of respondents
-                        - Permission from relevant authorities
-                        """
-                    )
-
-                elif slide_title == "Conclusion":
-
-                    st.markdown(
-                        """
-                        - Summarize the main findings or expected contribution.
-                        - Link the conclusion to the objectives.
-                        - Highlight the importance of the study.
-                        """
-                    )
-
-                elif slide_title == "Recommendations":
-
-                    st.markdown(
-                        """
-                        - Recommendation 1
-                        - Recommendation 2
-                        - Recommendation 3
-                        - Areas for further research
-                        """
-                    )
-
-                elif slide_title == "References":
-
-                    st.markdown(
-                        """
-                        - Include all sources cited in the presentation.
-                        - Use the required referencing style.
-                        - Prioritize recent and credible academic sources.
-                        """
-                    )
-
-                else:
-
-                    st.markdown(
-                        f"""
-                        - Key point related to **{slide_title}**
-                        - Supporting evidence
-                        - Relevant example
-                        - Important explanation
-                        """
-                    )
+                st.write(
+                    f"• {content}"
+                )
 
                 st.divider()
 
-            # =================================================
-            # ORIGINAL CONTENT
-            # =================================================
+        else:
 
-            st.subheader("📚 Source Content Provided")
-
-            st.info(
-                presentation_topic[:5000]
+            st.warning(
+                "Please enter a presentation topic."
             )
 
 
@@ -943,13 +628,12 @@ with tab3:
 # FOOTER
 # ============================================================
 
-st.divider()
+st.markdown("---")
 
-st.markdown(
-    """
-    ### 🧠 MALUMBO AI
-    **Academic • Research • Business • Agriculture**
+st.caption(
+    "🧠 MALUMBO AI | Built for Malawi 🇲🇼"
+)
 
-    Built to help students and researchers work smarter.
-    """
+st.caption(
+    "Academic • Documents • Web Search • Presentations"
 )
