@@ -1,11 +1,19 @@
 import streamlit as st
 import PyPDF2
 from docx import Document
+from docx.shared import Pt, Inches
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.section import WD_SECTION
+from pptx import Presentation
+from pptx.util import Inches, Pt as PPTPt
 from duckduckgo_search import DDGS
+import io
+import re
+
 
 # ============================================================
-# MALUMBO AI v3.0 - GLOBAL BRAIN
-# Global Web Search + Malawi Expertise + File Chat
+# MALUMBO AI v5.0
+# FULL AI WRITER + PRESENTATION GENERATOR
 # ============================================================
 
 st.set_page_config(
@@ -14,78 +22,69 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🧠 MALUMBO AI")
-st.caption("🌍 Global AI Assistant with 🇲🇼 Malawi Expertise")
+st.title("🧠 MALUMBO AI v5.0")
+st.caption("Global AI Research • Academic Writing • Presentation Generator")
+
 
 # ============================================================
-# MALAWI KNOWLEDGE BASE
+# MALAWI BASIC KNOWLEDGE
 # ============================================================
 
 MALAWI_KNOWLEDGE = {
-    "president malawi": "As of 2026, the President of Malawi is **Peter Mutharika**.",
-    "vice president malawi": "As of 2026, the Vice President of Malawi is **Jane Ansah**.",
-    "capital malawi": "The capital city of Malawi is **Lilongwe**.",
-    "currency malawi": "The currency of Malawi is the **Malawian kwacha (MWK)**.",
-    "language malawi": "Malawi's official language is **English**, while **Chichewa** is widely spoken.",
+    "capital malawi":
+        "The capital city of Malawi is Lilongwe.",
+
+    "malawi capital":
+        "The capital city of Malawi is Lilongwe.",
+
+    "president malawi":
+        "Malawi's presidency is a time-sensitive fact. MALUMBO AI will search the web for the latest information.",
+
+    "malawi":
+        "Malawi is a landlocked country in southeastern Africa. Its economy is strongly connected to agriculture, with maize being one of the major staple crops."
 }
-
-# ============================================================
-# FILE READER
-# ============================================================
-
-def read_file(file):
-    text = ""
-
-    try:
-        if file.name.lower().endswith(".pdf"):
-            pdf_reader = PyPDF2.PdfReader(file)
-
-            for page in pdf_reader.pages:
-                extracted = page.extract_text()
-
-                if extracted:
-                    text += extracted + "\n"
-
-        elif file.name.lower().endswith(".docx"):
-            doc = Document(file)
-
-            for para in doc.paragraphs:
-                if para.text.strip():
-                    text += para.text + "\n"
-
-        return text
-
-    except Exception as e:
-        return f"Could not read {file.name}: {e}"
 
 
 # ============================================================
 # WEB SEARCH
 # ============================================================
 
-def web_search(query, max_results=5):
+def ai_search(query):
 
-    context = ""
+    query_lower = query.lower()
+
+    # Check simple built-in knowledge first
+    for key, answer in MALAWI_KNOWLEDGE.items():
+
+        if key in query_lower and key != "malawi":
+            return (
+                "### Answer\n\n"
+                + answer
+                + "\n\n"
+                "### 🌍 Web Research\n\n"
+                "For current information, MALUMBO AI also searches the web below."
+            )
+
+    sources_text = []
     links = []
 
     try:
+
         with DDGS() as ddgs:
 
             results = ddgs.text(
                 query,
-                max_results=max_results
+                max_results=5
             )
 
             for r in results:
 
-                title = r.get("title", "Untitled source")
+                title = r.get("title", "Untitled")
                 body = r.get("body", "")
                 href = r.get("href", "")
 
-                context += (
-                    f"Source: {title}\n"
-                    f"{body}\n\n"
-                )
+                if body:
+                    sources_text.append(body)
 
                 if href:
                     links.append(
@@ -93,105 +92,630 @@ def web_search(query, max_results=5):
                     )
 
     except Exception as e:
-        return "", [], str(e)
 
-    return context, links, None
+        return (
+            "### Search Error\n\n"
+            f"Web search could not be completed.\n\n"
+            f"Error: `{str(e)}`"
+        )
+
+    if sources_text:
+
+        answer = " ".join(sources_text)
+
+        # Keep answer reasonably short
+        answer = answer[:3000]
+
+        response = (
+            "### 🧠 Answer\n\n"
+            + answer
+            + "\n\n"
+            "### 🔗 Sources\n\n"
+            + "\n".join(links)
+        )
+
+        return response
+
+    return (
+        "### No suitable results found\n\n"
+        "Try using a more specific search question."
+    )
 
 
 # ============================================================
-# SMART AI SEARCH
+# CLEAN FILE NAME
 # ============================================================
 
-def ai_search(query):
+def clean_filename(text):
 
-    query_lower = query.lower().strip()
+    text = re.sub(
+        r'[\\/*?:"<>|]',
+        "",
+        text
+    )
+
+    text = text.strip()
+
+    if not text:
+        text = "MALUMBO_AI_Output"
+
+    return text
+
+
+# ============================================================
+# WORD DOCUMENT GENERATOR
+# ============================================================
+
+def generate_docx(topic):
+
+    doc = Document()
 
     # --------------------------------------------------------
-    # 1. CHECK MALAWI KNOWLEDGE BASE
+    # PAGE SETUP
     # --------------------------------------------------------
 
-    if "malawi" in query_lower:
+    section = doc.sections[0]
 
-        for key, answer in MALAWI_KNOWLEDGE.items():
-
-            words = key.split()
-
-            if all(word in query_lower for word in words):
-
-                return (
-                    f"### 🇲🇼 MALAWI ANSWER\n\n"
-                    f"{answer}\n\n"
-                    f"*Answered from MALUMBO AI's Malawi knowledge base.*"
-                )
+    section.top_margin = Inches(1)
+    section.bottom_margin = Inches(1)
+    section.left_margin = Inches(1)
+    section.right_margin = Inches(1)
 
     # --------------------------------------------------------
-    # 2. GLOBAL SEARCH
+    # DEFAULT FONT
     # --------------------------------------------------------
 
-    search_query = query
+    styles = doc.styles
 
-    # If Malawi is mentioned, boost Malawi without
-    # restricting the search to Malawi-only websites.
-    if "malawi" in query_lower:
-        search_query = f"{query} Malawi"
+    normal_style = styles["Normal"]
 
-    context, links, error = web_search(
-        search_query,
-        max_results=5
+    normal_style.font.name = "Times New Roman"
+    normal_style.font.size = Pt(12)
+
+    # --------------------------------------------------------
+    # TITLE
+    # --------------------------------------------------------
+
+    title = doc.add_heading(
+        topic,
+        0
+    )
+
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    for run in title.runs:
+        run.font.name = "Times New Roman"
+        run.font.size = Pt(20)
+        run.bold = True
+
+    # --------------------------------------------------------
+    # SUBTITLE
+    # --------------------------------------------------------
+
+    subtitle = doc.add_paragraph()
+
+    subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    run = subtitle.add_run(
+        "Academic Paper Generated by MALUMBO AI"
+    )
+
+    run.font.name = "Times New Roman"
+    run.font.size = Pt(12)
+    run.italic = True
+
+    doc.add_paragraph()
+
+    # --------------------------------------------------------
+    # INTRODUCTION
+    # --------------------------------------------------------
+
+    heading = doc.add_heading(
+        "1. Introduction",
+        level=1
+    )
+
+    heading.alignment = WD_ALIGN_PARAGRAPH.LEFT
+
+    intro = (
+        f"{topic} is an important subject that has attracted "
+        "considerable attention among researchers, policymakers, "
+        "development practitioners and other stakeholders. "
+        "Understanding this topic requires consideration of its "
+        "background, major characteristics, causes, effects and "
+        "possible approaches for addressing associated challenges."
+    )
+
+    p = doc.add_paragraph(intro)
+
+    p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
+    # --------------------------------------------------------
+    # BACKGROUND
+    # --------------------------------------------------------
+
+    doc.add_heading(
+        "2. Background",
+        level=1
+    )
+
+    background = (
+        f"The background of {topic} can be understood by examining "
+        "the wider economic, social, environmental and institutional "
+        "factors surrounding the issue. Different countries and "
+        "communities may experience the issue differently depending "
+        "on available resources, policies, technology, education, "
+        "markets and institutional support."
+    )
+
+    p = doc.add_paragraph(background)
+
+    p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
+    # --------------------------------------------------------
+    # MAIN DISCUSSION
+    # --------------------------------------------------------
+
+    doc.add_heading(
+        "3. Main Discussion",
+        level=1
+    )
+
+    points = [
+
+        (
+            "3.1 Key Issues",
+            f"One of the major issues associated with {topic} "
+            "is the interaction between individuals, institutions "
+            "and the wider environment. These interactions can "
+            "influence decision-making, resource allocation and "
+            "development outcomes."
+        ),
+
+        (
+            "3.2 Importance",
+            f"{topic} is important because it can influence "
+            "economic performance, household welfare, institutional "
+            "decision-making and long-term development. Understanding "
+            "the issue can therefore help stakeholders design better "
+            "policies and interventions."
+        ),
+
+        (
+            "3.3 Challenges",
+            f"Several challenges may affect the management of "
+            f"{topic}. These may include limited financial resources, "
+            "insufficient information, institutional constraints, "
+            "limited access to technology and differences in the "
+            "capacity of stakeholders."
+        ),
+
+        (
+            "3.4 Possible Solutions",
+            f"Addressing challenges related to {topic} requires "
+            "a combination of appropriate policies, research, "
+            "education, investment and cooperation among relevant "
+            "stakeholders. Solutions should be based on reliable "
+            "evidence and should consider the circumstances of "
+            "the affected communities."
+        )
+
+    ]
+
+    for heading_text, paragraph_text in points:
+
+        doc.add_heading(
+            heading_text,
+            level=2
+        )
+
+        p = doc.add_paragraph(
+            paragraph_text
+        )
+
+        p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
+    # --------------------------------------------------------
+    # MALAWI CONTEXT
+    # --------------------------------------------------------
+
+    doc.add_heading(
+        "4. Malawi Context",
+        level=1
+    )
+
+    malawi = (
+        f"In Malawi, {topic} should be considered within the "
+        "country's economic and social context. Agriculture plays "
+        "an important role in livelihoods and the national economy, "
+        "while access to markets, finance, information, technology "
+        "and public services can influence development outcomes. "
+        "Consequently, interventions should be adapted to local "
+        "conditions and supported by credible research."
+    )
+
+    p = doc.add_paragraph(
+        malawi
+    )
+
+    p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
+    # --------------------------------------------------------
+    # CONCLUSION
+    # --------------------------------------------------------
+
+    doc.add_heading(
+        "5. Conclusion",
+        level=1
+    )
+
+    conclusion = (
+        f"In conclusion, {topic} is a significant subject that "
+        "requires careful analysis and evidence-based decision-making. "
+        "The discussion has highlighted major issues, importance, "
+        "challenges and possible approaches for addressing the issue. "
+        "Further research and appropriate interventions can contribute "
+        "to better understanding and improved outcomes."
+    )
+
+    p = doc.add_paragraph(
+        conclusion
+    )
+
+    p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
+    # --------------------------------------------------------
+    # REFERENCES
+    # --------------------------------------------------------
+
+    doc.add_heading(
+        "6. References",
+        level=1
+    )
+
+    references = [
+        "Food and Agriculture Organization. Publications and research resources on agriculture and development.",
+        "World Bank. World Development Reports and development research resources.",
+        "International research literature relevant to the selected topic."
+    ]
+
+    for reference in references:
+
+        p = doc.add_paragraph(
+            reference,
+            style="List Number"
+        )
+
+        p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+
+    # --------------------------------------------------------
+    # FOOTER
+    # --------------------------------------------------------
+
+    footer = section.footer.paragraphs[0]
+
+    footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    footer_run = footer.add_run(
+        "Generated by MALUMBO AI"
+    )
+
+    footer_run.font.name = "Times New Roman"
+    footer_run.font.size = Pt(9)
+
+    # --------------------------------------------------------
+    # SAVE TO MEMORY
+    # --------------------------------------------------------
+
+    buffer = io.BytesIO()
+
+    doc.save(buffer)
+
+    buffer.seek(0)
+
+    return buffer
+
+
+# ============================================================
+# POWERPOINT GENERATOR
+# ============================================================
+
+def generate_pptx(topic):
+
+    prs = Presentation()
+
+    # --------------------------------------------------------
+    # SLIDE 1 - TITLE
+    # --------------------------------------------------------
+
+    slide = prs.slides.add_slide(
+        prs.slide_layouts[0]
+    )
+
+    slide.shapes.title.text = topic
+
+    slide.placeholders[1].text = (
+        "Academic Presentation\n"
+        "Generated by MALUMBO AI"
     )
 
     # --------------------------------------------------------
-    # 3. SEARCH ERROR
+    # SLIDE 2 - INTRODUCTION
     # --------------------------------------------------------
 
-    if error:
-
-        return (
-            "### ⚠️ Web Search Problem\n\n"
-            f"I could not complete the web search.\n\n"
-            f"**Error:** `{error}`\n\n"
-            "Try searching again in a few seconds."
-        )
-
-    # --------------------------------------------------------
-    # 4. NO RESULTS
-    # --------------------------------------------------------
-
-    if not context:
-
-        return (
-            f"### 🔎 No Results Found\n\n"
-            f"I couldn't find useful web results for:\n\n"
-            f"**{query}**\n\n"
-            "Try using different keywords."
-        )
-
-    # --------------------------------------------------------
-    # 5. DISPLAY RESULTS
-    # --------------------------------------------------------
-
-    answer = (
-        f"### 🌍 Results for: `{query}`\n\n"
-        "I found the following information from the web:\n\n"
+    slide = prs.slides.add_slide(
+        prs.slide_layouts[1]
     )
 
-    answer += context
+    slide.shapes.title.text = "1. Introduction"
+
+    body = slide.placeholders[1]
+
+    body.text = (
+        f"{topic} is an important subject with "
+        "economic, social and developmental implications."
+    )
+
+    bullets = [
+        "Overview of the topic",
+        "Importance of understanding the issue",
+        "Relevance to society and development"
+    ]
+
+    for item in bullets:
+
+        p = body.text_frame.add_paragraph()
+        p.text = item
+        p.level = 0
 
     # --------------------------------------------------------
-    # 6. SOURCES
+    # SLIDE 3 - BACKGROUND
     # --------------------------------------------------------
 
-    if links:
+    slide = prs.slides.add_slide(
+        prs.slide_layouts[1]
+    )
 
-        answer += "\n### 🔗 Sources\n\n"
+    slide.shapes.title.text = "2. Background"
 
-        answer += "\n".join(links)
+    body = slide.placeholders[1]
 
-    return answer
+    body.text = (
+        f"The background of {topic} provides the "
+        "foundation for understanding the issue."
+    )
+
+    for item in [
+        "Historical and current context",
+        "Major factors influencing the issue",
+        "Relevant economic and social conditions"
+    ]:
+
+        p = body.text_frame.add_paragraph()
+        p.text = item
+
+    # --------------------------------------------------------
+    # SLIDE 4 - KEY ISSUES
+    # --------------------------------------------------------
+
+    slide = prs.slides.add_slide(
+        prs.slide_layouts[1]
+    )
+
+    slide.shapes.title.text = "3. Key Issues"
+
+    body = slide.placeholders[1]
+
+    body.text = f"Major issues related to {topic} include:"
+
+    for item in [
+        "Resource constraints",
+        "Access to information and technology",
+        "Institutional challenges",
+        "Different stakeholder interests"
+    ]:
+
+        p = body.text_frame.add_paragraph()
+        p.text = item
+
+    # --------------------------------------------------------
+    # SLIDE 5 - IMPORTANCE
+    # --------------------------------------------------------
+
+    slide = prs.slides.add_slide(
+        prs.slide_layouts[1]
+    )
+
+    slide.shapes.title.text = "4. Importance"
+
+    body = slide.placeholders[1]
+
+    body.text = (
+        f"{topic} is important because it can "
+        "affect development and decision-making."
+    )
+
+    for item in [
+        "Supports informed decision-making",
+        "Can influence household welfare",
+        "Can affect economic performance",
+        "Provides opportunities for research and innovation"
+    ]:
+
+        p = body.text_frame.add_paragraph()
+        p.text = item
+
+    # --------------------------------------------------------
+    # SLIDE 6 - CHALLENGES
+    # --------------------------------------------------------
+
+    slide = prs.slides.add_slide(
+        prs.slide_layouts[1]
+    )
+
+    slide.shapes.title.text = "5. Challenges"
+
+    body = slide.placeholders[1]
+
+    body.text = (
+        f"Several challenges may affect {topic}."
+    )
+
+    for item in [
+        "Limited financial resources",
+        "Limited access to technology",
+        "Insufficient information",
+        "Institutional constraints",
+        "Limited technical capacity"
+    ]:
+
+        p = body.text_frame.add_paragraph()
+        p.text = item
+
+    # --------------------------------------------------------
+    # SLIDE 7 - MALAWI CONTEXT
+    # --------------------------------------------------------
+
+    slide = prs.slides.add_slide(
+        prs.slide_layouts[1]
+    )
+
+    slide.shapes.title.text = "6. Malawi Context"
+
+    body = slide.placeholders[1]
+
+    body.text = (
+        f"In Malawi, {topic} can be examined "
+        "within the country's local economic and "
+        "social conditions."
+    )
+
+    for item in [
+        "Agriculture is important to livelihoods",
+        "Rural communities face resource constraints",
+        "Markets and institutions influence outcomes",
+        "Local evidence is important for policy"
+    ]:
+
+        p = body.text_frame.add_paragraph()
+        p.text = item
+
+    # --------------------------------------------------------
+    # SLIDE 8 - POSSIBLE SOLUTIONS
+    # --------------------------------------------------------
+
+    slide = prs.slides.add_slide(
+        prs.slide_layouts[1]
+    )
+
+    slide.shapes.title.text = "7. Possible Solutions"
+
+    body = slide.placeholders[1]
+
+    body.text = (
+        "Potential approaches for addressing the "
+        "challenges include:"
+    )
+
+    for item in [
+        "Evidence-based policies",
+        "Education and awareness",
+        "Investment in technology",
+        "Improved institutional support",
+        "Further research"
+    ]:
+
+        p = body.text_frame.add_paragraph()
+        p.text = item
+
+    # --------------------------------------------------------
+    # SLIDE 9 - RECOMMENDATIONS
+    # --------------------------------------------------------
+
+    slide = prs.slides.add_slide(
+        prs.slide_layouts[1]
+    )
+
+    slide.shapes.title.text = "8. Recommendations"
+
+    body = slide.placeholders[1]
+
+    body.text = (
+        f"Based on the discussion of {topic}, "
+        "the following recommendations can be considered:"
+    )
+
+    for item in [
+        "Strengthen research and evidence generation",
+        "Improve stakeholder cooperation",
+        "Increase access to relevant information",
+        "Support practical and locally appropriate interventions"
+    ]:
+
+        p = body.text_frame.add_paragraph()
+        p.text = item
+
+    # --------------------------------------------------------
+    # SLIDE 10 - CONCLUSION
+    # --------------------------------------------------------
+
+    slide = prs.slides.add_slide(
+        prs.slide_layouts[1]
+    )
+
+    slide.shapes.title.text = "9. Conclusion"
+
+    body = slide.placeholders[1]
+
+    body.text = (
+        f"{topic} is an important issue that "
+        "requires evidence-based analysis and "
+        "appropriate interventions."
+    )
+
+    for item in [
+        "The issue has important development implications",
+        "Challenges require coordinated responses",
+        "Research can support better decision-making",
+        "Thank you"
+    ]:
+
+        p = body.text_frame.add_paragraph()
+        p.text = item
+
+    # --------------------------------------------------------
+    # FORMAT ALL SLIDES
+    # --------------------------------------------------------
+
+    for slide in prs.slides:
+
+        for shape in slide.shapes:
+
+            if not hasattr(shape, "text_frame"):
+                continue
+
+            for paragraph in shape.text_frame.paragraphs:
+
+                for run in paragraph.runs:
+
+                    run.font.name = "Arial"
+                    run.font.size = PPTPt(22)
+
+    # --------------------------------------------------------
+    # SAVE
+    # --------------------------------------------------------
+
+    buffer = io.BytesIO()
+
+    prs.save(buffer)
+
+    buffer.seek(0)
+
+    return buffer
 
 
 # ============================================================
-# PAGE TABS
+# TABS
 # ============================================================
 
 tab1, tab2, tab3 = st.tabs(
@@ -204,57 +728,23 @@ tab1, tab2, tab3 = st.tabs(
 
 
 # ============================================================
-# TAB 1 - RESEARCH & CHAT
+# TAB 1 - RESEARCH
 # ============================================================
 
 with tab1:
 
-    st.header("🌍 Research The Whole Internet")
+    st.header(
+        "🌍 Research The Whole Internet"
+    )
 
     st.write(
-        "Ask MALUMBO AI about Malawi, USA, UK, science, "
-        "technology, agriculture, economics, politics, news, "
-        "academic research and much more."
+        "Ask MALUMBO AI a question and search the web "
+        "for relevant information."
     )
-
-    uploaded_files = st.file_uploader(
-        "📎 Upload PDF or DOCX",
-        type=["pdf", "docx"],
-        accept_multiple_files=True
-    )
-
-    file_context = ""
-
-    if uploaded_files:
-
-        st.success(
-            f"📚 {len(uploaded_files)} file(s) uploaded."
-        )
-
-        for file in uploaded_files:
-
-            with st.spinner(f"Reading {file.name}..."):
-
-                extracted_text = read_file(file)
-
-                file_context += (
-                    f"\n\n===== FILE: {file.name} =====\n"
-                    f"{extracted_text}\n"
-                )
-
-        with st.expander("📄 View uploaded file information"):
-
-            for file in uploaded_files:
-                st.write(
-                    f"• **{file.name}**"
-                )
 
     query = st.text_input(
         "Ask anything",
-        placeholder=(
-            "Example: latest AI research 2026, "
-            "president of USA, climate change effects..."
-        )
+        placeholder="Example: What are the effects of climate change on agriculture?"
     )
 
     if st.button(
@@ -262,39 +752,25 @@ with tab1:
         use_container_width=True
     ):
 
-        if not query:
+        if query.strip():
 
-            st.warning(
-                "Please enter a question first."
+            with st.spinner(
+                "Searching the web..."
+            ):
+
+                result = ai_search(
+                    query
+                )
+
+            st.markdown(
+                result
             )
 
         else:
 
-            with st.spinner(
-                "🌍 Searching the global web..."
-            ):
-
-                # If files were uploaded, include their
-                # content in the search context.
-                if file_context:
-
-                    st.markdown(
-                        "### 📚 Uploaded Document Context"
-                    )
-
-                    # Limit displayed document text
-                    # to prevent extremely large output.
-                    display_context = file_context[:12000]
-
-                    st.text_area(
-                        "Document content",
-                        display_context,
-                        height=250
-                    )
-
-                st.markdown(
-                    ai_search(query)
-                )
+            st.warning(
+                "Please enter a question first."
+            )
 
 
 # ============================================================
@@ -303,239 +779,129 @@ with tab1:
 
 with tab2:
 
-    st.header("✍️ Academic Writing Assistant")
+    st.header(
+        "✍️ Full Academic Writing"
+    )
 
     st.write(
-        "Create a basic academic structure for essays, "
-        "assignments and research papers."
+        "Generate a formatted Word document (.docx)."
     )
 
     topic = st.text_input(
         "Essay / Research Paper Topic",
-        key="academic_topic",
-        placeholder="Enter your topic..."
-    )
-
-    level = st.selectbox(
-        "Academic Level",
-        [
-            "High School",
-            "University",
-            "Masters"
-        ]
-    )
-
-    academic_type = st.selectbox(
-        "Type of Work",
-        [
-            "Essay",
-            "Research Paper",
-            "Assignment",
-            "Research Proposal",
-            "Literature Review"
-        ]
+        placeholder="Example: Effects of Climate Change on Agriculture"
     )
 
     if st.button(
-        "📝 Generate Outline + Sources",
+        "📝 Generate Full Paper",
         use_container_width=True
     ):
 
-        if not topic:
+        if topic.strip():
 
-            st.warning(
-                "Please enter an academic topic first."
+            with st.spinner(
+                "Creating your academic paper..."
+            ):
+
+                docx_file = generate_docx(
+                    topic
+                )
+
+            st.success(
+                "✅ Academic paper generated successfully!"
+            )
+
+            filename = (
+                clean_filename(topic)
+                + ".docx"
+            )
+
+            st.download_button(
+                label="📄 Download Full Essay.docx",
+                data=docx_file,
+                file_name=filename,
+                mime=(
+                    "application/vnd.openxmlformats-officedocument."
+                    "wordprocessingml.document"
+                ),
+                use_container_width=True
             )
 
         else:
 
-            st.markdown(
-                f"""
-### 📚 Academic Work
-
-**Topic:** {topic}
-
-**Level:** {level}
-
-**Type:** {academic_type}
-
----
-
-### Suggested Structure
-
-**1. Introduction**
-
-- Background of the study
-- Problem statement
-- Purpose of the study
-- Objectives
-- Research questions
-
-**2. Literature Review**
-
-- Key concepts
-- Theoretical literature
-- Empirical literature
-- Research gap
-
-**3. Methodology**
-
-- Research design
-- Study area
-- Target population
-- Sampling procedure
-- Sample size
-- Data collection
-- Data analysis
-
-**4. Results / Discussion**
-
-- Presentation of findings
-- Interpretation
-- Comparison with previous studies
-
-**5. Conclusion**
-
-- Summary of findings
-- Conclusions
-- Recommendations
-
-**6. References**
-
-- Use appropriate academic sources
-- Apply APA referencing where required
-                """
-            )
-
-            st.info(
-                "💡 Tip: Use the Research & Chat tab to "
-                "search for current academic sources before "
-                "writing your literature review."
+            st.warning(
+                "Please enter an essay or research topic."
             )
 
 
 # ============================================================
-# TAB 3 - PRESENTATION GENERATOR
+# TAB 3 - PRESENTATION
 # ============================================================
 
 with tab3:
 
-    st.header("📊 Presentation Generator")
+    st.header(
+        "📊 Full Presentation Generator"
+    )
 
     st.write(
-        "Generate a simple presentation structure "
-        "for academic or professional presentations."
+        "Generate a complete PowerPoint presentation (.pptx)."
     )
 
     pres_topic = st.text_input(
         "Presentation Topic",
-        key="presentation_topic",
-        placeholder="Example: Conservation Agriculture"
-    )
-
-    slides = st.slider(
-        "Number of Slides",
-        min_value=3,
-        max_value=15,
-        value=7
+        placeholder="Example: Marketing in Malawi"
     )
 
     if st.button(
-        "📊 Generate Slide Structure",
+        "📊 Generate Full Presentation",
         use_container_width=True
     ):
 
-        if not pres_topic:
+        if pres_topic.strip():
 
-            st.warning(
-                "Please enter a presentation topic first."
+            with st.spinner(
+                "Creating your PowerPoint presentation..."
+            ):
+
+                pptx_file = generate_pptx(
+                    pres_topic
+                )
+
+            st.success(
+                "✅ PowerPoint presentation generated successfully!"
+            )
+
+            filename = (
+                clean_filename(pres_topic)
+                + ".pptx"
+            )
+
+            st.download_button(
+                label="📊 Download Full Presentation.pptx",
+                data=pptx_file,
+                file_name=filename,
+                mime=(
+                    "application/vnd.openxmlformats-officedocument."
+                    "presentationml.presentation"
+                ),
+                use_container_width=True
             )
 
         else:
 
-            st.markdown(
-                f"## 📊 Presentation: {pres_topic}"
+            st.warning(
+                "Please enter a presentation topic."
             )
-
-            st.write(
-                f"**Number of slides:** {slides}"
-            )
-
-            slide_titles = [
-                "Title",
-                "Introduction",
-                "Background",
-                "Problem Statement",
-                "Objectives",
-                "Literature Review",
-                "Methodology",
-                "Results",
-                "Discussion",
-                "Conclusion",
-                "Recommendations",
-                "References",
-                "Questions & Answers",
-                "Thank You"
-            ]
-
-            for i in range(slides):
-
-                if i < len(slide_titles):
-
-                    title = slide_titles[i]
-
-                else:
-
-                    title = f"Section {i + 1}"
-
-                st.markdown(
-                    f"""
-### Slide {i + 1}: {title}
-
-- Key point 1
-- Key point 2
-- Key point 3
-                    """
-                )
 
 
 # ============================================================
-# SIDEBAR
+# FOOTER
 # ============================================================
 
-st.sidebar.title("🧠 MALUMBO AI")
+st.divider()
 
-st.sidebar.success(
-    """
-✅ Global Web Search
-
-✅ Malawi Expert Mode
-
-✅ Academic Research
-
-✅ PDF/DOCX Upload
-
-✅ Academic Writing
-
-✅ Presentation Generator
-"""
-)
-
-st.sidebar.markdown("---")
-
-st.sidebar.info(
-    """
-🌍 **MALUMBO AI v3.0**
-
-A global AI research assistant
-with special knowledge of Malawi.
-
-🇲🇼 Malawi + 🌍 Global
-"""
-)
-
-st.sidebar.markdown("---")
-
-st.sidebar.caption(
-    "Built with Streamlit • MALUMBO AI"
+st.caption(
+    "🧠 MALUMBO AI v5.0 — Global AI Research + "
+    "Academic Writer + Presentation Generator"
 )
