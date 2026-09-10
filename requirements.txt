@@ -1,0 +1,6 @@
+streamlit
+python-docx
+pandas
+PyPDF2
+duckduckgo-search
+huggingface_hub
